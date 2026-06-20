@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { rollDice, movePlayer, collectSalary, buyAsset, freedomProgress, netPassiveIncome, baseExpenses, botDecide, getCreditLimit, getTotalDebtPayments, repayDebt, takeCredit, calcDividends } from '@/lib/gameEngine'
@@ -35,6 +35,21 @@ const CELL_ICONS: Record<string, JSX.Element> = {
   auction:     <IconGavel size={22} />,
   child:       <span style={{fontSize:20}}>👶</span>,
   charity:     <span style={{fontSize:20}}>✨</span>,
+}
+
+// Вне компонента — не пересоздаётся при каждом рендере
+const EV_CFG: Record<string,{icon:string,label:string,color:string,global?:boolean}> = {
+  roll:        { icon:'die',       label:'Ход',        color:'rgba(255,255,255,0.5)' },
+  buy:         { icon:'buy',       label:'Покупка',    color:'#34D399' },
+  sell:        { icon:'sell',      label:'Продажа',    color:'#F5B843' },
+  salary:      { icon:'salary',    label:'Зарплата',   color:'#34D399' },
+  hit:         { icon:'hit',       label:'Удар',       color:'#F87171' },
+  event:       { icon:'event',     label:'Событие',    color:'#A78BFA', global:true },
+  credit:      { icon:'credit',    label:'Кредит',     color:'#60A5FA' },
+  repay:       { icon:'repay',     label:'Погашение',  color:'#34D399' },
+  freedom:     { icon:'freedom',   label:'Свобода!',   color:'#FBD888', global:true },
+  auction_win: { icon:'trophy',    label:'Аукцион',    color:'#F59E0B', global:true },
+  child:       { icon:'child',     label:'Ребёнок',    color:'#F5B843', global:true },
 }
 
 const sounds = {
@@ -548,20 +563,33 @@ useEffect(() => {
   }
 }, [isMyTurn, myPlayer?.cash, myPlayer?.passive_income, myPlayer?.total_expenses, (myPlayer as any)?.is_eliminated])
 
-// Отсчёт таймера
+// Таймер хода — ref для реального значения (не вызывает ре-рендер каждую секунду)
+const timeLeftRef = useRef(timeLeft)
+timeLeftRef.current = timeLeft
+
 useEffect(() => {
   if (roomStatus !== 'playing' || !gameState) return
-  if (showBankrupt || showEmergency) return // не обрабатываем таймер во время экранов банкротства/кризиса
-  if (timeLeft <= 0) {
-    if (isMyTurn && !rolling) {
-      if (!hasRolled) handleRoll()
-      else { setShowTurnCard(false); advanceTurn(gameState) }
+  if (showBankrupt || showEmergency) return
+  const interval = setInterval(() => {
+    const current = timeLeftRef.current
+    if (current <= 1) {
+      clearInterval(interval)
+      setTimeLeft(0)
+    } else {
+      setTimeLeft(current - 1)
     }
-    return
+  }, 1000)
+  return () => clearInterval(interval)
+// Только перезапускаем когда меняется ход или статус
+}, [isMyTurn, roomStatus, showBankrupt, showEmergency])
+
+// Обработка истечения таймера
+useEffect(() => {
+  if (timeLeft <= 0 && roomStatus === 'playing' && isMyTurn && !rolling && !showBankrupt && !showEmergency) {
+    if (!hasRolled) handleRoll()
+    else { setShowTurnCard(false); advanceTurn(gameState) }
   }
-  const t = setTimeout(() => setTimeLeft(prev => prev - 1), 1000)
-  return () => clearTimeout(t)
-}, [timeLeft, roomStatus, gameState, hasRolled])
+}, [timeLeft, isMyTurn, rolling, hasRolled, showBankrupt, showEmergency])
 
 // Глобальный таймер игры
 useEffect(() => {
@@ -1082,26 +1110,15 @@ useEffect(() => {
   const doubleDiceActive = ((myPlayer as any)?.double_dice_rounds ?? 0) > 0
   const doubleDiceLeft = (myPlayer as any)?.double_dice_rounds ?? 0
 
-  const evCfg: Record<string,{icon:string,label:string,color:string,global?:boolean}> = {
-    roll:        { icon:'die',       label:'Ход',        color:'rgba(255,255,255,0.5)' },
-    buy:         { icon:'buy',       label:'Покупка',    color:'#34D399' },
-    sell:        { icon:'sell',      label:'Продажа',    color:'#F5B843' },
-    salary:      { icon:'salary',    label:'Зарплата',   color:'#34D399' },
-    hit:         { icon:'hit',       label:'Удар',       color:'#F87171' },
-    event:       { icon:'event',     label:'Событие',    color:'#A78BFA', global:true },
-    credit:      { icon:'credit',    label:'Кредит',     color:'#60A5FA' },
-    repay:       { icon:'repay',     label:'Погашение',  color:'#34D399' },
-    freedom:     { icon:'freedom',   label:'Свобода!',   color:'#FBD888', global:true },
-    auction_win: { icon:'trophy',    label:'Аукцион',    color:'#F59E0B', global:true },
-    child:       { icon:'child',     label:'Ребёнок',    color:'#F5B843', global:true },
-  }
-  // Новые события сверху
-  const journalAllEvents: any[] = [...(gameState?.events??[])].reverse()
+  const evCfg = EV_CFG // ссылка на модульную константу
+  // Новые события сверху — кэшируем пока events не меняется
+  const eventsKey = gameState?.events?.length ?? 0
+  const journalAllEvents: any[] = eventsKey > 0 ? [...(gameState.events)].reverse() : []
   const journalFiltered = journalAllEvents.filter((ev:any)=>{
     if(journalFilter==='mine')   return ev.player_id===myPlayerId
     if(journalFilter==='global') return !!evCfg[ev.type]?.global
     if(journalFilter==='money')  return ['buy','sell','hit','salary','repay','credit','auction_win'].includes(ev.type) && ev.amount != null && ev.amount !== 0
-    return ev.type !== 'roll' // в "Все" скрываем броски кубика
+    return ev.type !== 'roll'
   })
   // Группировка активов — акции/крипта суммируются по базовому названию
   const groupedAssets = (() => {
