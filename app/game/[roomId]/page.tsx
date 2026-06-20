@@ -198,6 +198,7 @@ export default function GamePage() {
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
   const [roomStatus, setRoomStatus] = useState<string>('lobby')
   const [startingGame, setStartingGame] = useState(false)
+  const [gameStarting, setGameStarting] = useState(false) // "Запускается..." для не-хоста
   const [roomCode, setRoomCode] = useState('')
   const [isHost, setIsHost] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -283,9 +284,34 @@ export default function GamePage() {
         setAnyoneRolling(false)
         if (anyoneRollingTimerRef.current) clearTimeout(anyoneRollingTimerRef.current)
       })
+      .on('broadcast', { event: 'game_starting' }, () => {
+        // Хост нажал "Начать" — мгновенно показываем "Запускается..."
+        setGameStarting(true)
+        // Принудительно обновляем стейт из БД
+        db.from('rooms').select('game_state, status, host_id').eq('id', roomId).single()
+          .then(({ data }: {data: any}) => {
+            if (data) { setGameState(data.game_state); setRoomStatus(data.status) }
+          })
+      })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel); supabase.removeChannel(bcChannel) }
+    // Polling: пока в лобби — проверяем БД каждые 3 секунды (запасной механизм)
+    const pollInterval = setInterval(() => {
+      setRoomStatus(prev => {
+        if (prev !== 'lobby') { clearInterval(pollInterval); return prev }
+        db.from('rooms').select('game_state, status').eq('id', roomId).single()
+          .then(({ data }: {data: any}) => {
+            if (data?.status === 'playing') { setGameState(data.game_state); setRoomStatus('playing') }
+          })
+        return prev
+      })
+    }, 3000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      supabase.removeChannel(bcChannel)
+      clearInterval(pollInterval)
+    }
   }, [roomId])
 
   useEffect(() => {
@@ -1016,6 +1042,8 @@ useEffect(() => {
   async function startGame() {
     if (startingGame) return
     setStartingGame(true)
+    // Мгновенно сообщаем всем через broadcast
+    bcChannelRef.current?.send({ type: 'broadcast', event: 'game_starting', payload: {} })
     const initState = gameState ? { ...gameState, key_rate: KEY_RATE_DEFAULT, game_started_at: new Date().toISOString() } : { key_rate: KEY_RATE_DEFAULT, game_started_at: new Date().toISOString() }
     await db.from('rooms').update({ status: 'playing', game_state: initState }).eq('id', roomId)
     setRoomStatus('playing')
@@ -1121,7 +1149,9 @@ useEffect(() => {
               ) : (
                 <div className="flex items-center justify-center gap-3 rounded-[20px] border border-white/[0.08] bg-white/[0.04] p-[17px]">
                   <div className="h-2 w-2 rounded-full bg-gold animate-pulse" />
-                  <span className="text-[15px] font-semibold text-faint">Ждём хоста...</span>
+                  <span className="text-[15px] font-semibold" style={{ color: gameStarting ? '#34D399' : undefined }}>
+                    {gameStarting ? '🟢 Запускается...' : 'Ждём хоста...'}
+                  </span>
                 </div>
               )}
               <div className="mt-3 text-center text-[12px] text-faint">
