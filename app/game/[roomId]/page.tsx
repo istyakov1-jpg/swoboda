@@ -610,12 +610,13 @@ useEffect(() => {
   const t = setTimeout(async () => {
     const remaining = skipLeft - 1
     const updatedPlayer = { ...myPlayer, skip_turns: remaining }
-    const newPlayers = gameState.players.map((p: any) => p.id === myPlayerId ? updatedPlayer : p)
+    const allPlayers = gameState.players.map((p: any) => p.id === myPlayerId ? updatedPlayer : p)
+    // Ротируем сразу — иначе realtime перезапустит этот эффект до смены хода
+    const [skipCur, ...skipRest] = allPlayers
     const ev = { id: crypto.randomUUID(), round: gameState.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} пропускает ход${remaining > 0 ? ` (осталось: ${remaining})` : ' — возвращается в игру!'}`, created_at: new Date().toISOString() }
-    const newState = { ...gameState, players: newPlayers, events: [ev, ...(gameState.events||[])].slice(0,50) }
+    const newState = { ...gameState, players: [...skipRest, skipCur], events: [ev, ...(gameState.events||[])].slice(0,50) }
     latestStateRef.current = newState
     await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
-    advanceTurn(newState)
   }, 1500)
   return () => clearTimeout(t)
 }, [isMyTurn, (myPlayer as any)?.skip_turns])
@@ -1038,13 +1039,15 @@ useEffect(() => {
 
   async function advanceTurn(state: any) {
     if (!state) return
-    if (isAdvancingRef.current) return // защита от двойного вызова
+    if (isAdvancingRef.current) return
     isAdvancingRef.current = true
-    setTimeLeft(TIME_LIMIT) // сбрасываем таймер чтобы не застрять на 0
+    setTimeLeft(TIME_LIMIT)
     const [current, ...rest] = state.players
-    const { error } = await db.from('rooms').update({ game_state: { ...state, players: [...rest, current], rolling_player_id: null } }).eq('id', roomId)
-    isAdvancingRef.current = false
-    if (error) console.error('[ADVANCE] DB error:', error)
+    try {
+      await db.from('rooms').update({ game_state: { ...state, players: [...rest, current], rolling_player_id: null } }).eq('id', roomId)
+    } finally {
+      isAdvancingRef.current = false // гарантированный сброс даже при ошибке сети
+    }
   }
 
   if (!gameState || !myPlayerId) return (
