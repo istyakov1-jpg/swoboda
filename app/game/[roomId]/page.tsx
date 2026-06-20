@@ -809,23 +809,6 @@ useEffect(() => {
 
       const prefs = notifPrefsRef.current
 
-      // Удар с пропуском хода → всегда авто-обрабатываем без карточки
-      if (cell.type === 'hit' && pickedHit && (pickedHit as any).skip_turns) {
-        const skipCount = (pickedHit as any).skip_turns as number
-        const salaryLoss = (pickedHit as any).lose_salary ? (myPlayer.profession?.salary ?? 0) : 0
-        const updatedAfterSkip = { ...updatedPlayer, cash: updatedPlayer.cash - salaryLoss, skip_turns: skipCount }
-        const skipPlayers = gameState.players.map((p: Player) => p.id === myPlayerId ? updatedAfterSkip : p)
-        const skipEv = { id: crypto.randomUUID(), round: gameState.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} — ${pickedHit.desc}. Пропускает ${skipCount} хода`, amount: salaryLoss, created_at: new Date().toISOString() }
-        const autoState = { ...newState, players: skipPlayers, events: [skipEv, ...(newState.events||[])].slice(0,50) }
-        latestStateRef.current = autoState
-        if (salaryLoss > 0) showCashNotif(`${pickedHit.desc}`, salaryLoss, false)
-        snd.hit()
-        await db.from('rooms').update({ game_state: autoState }).eq('id', roomId)
-        isRollingRef.current = false
-        setTimeout(() => advanceTurn(autoState), 800)
-        return
-      }
-
       // Удар отключён → списать деньги автоматически + верхний баннер
       if (cell.type === 'hit' && !prefs.hit && pickedHit) {
         const amount = Math.round(pickedHit.amount * diffConfig.hit_multiplier)
