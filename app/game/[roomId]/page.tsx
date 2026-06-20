@@ -431,7 +431,7 @@ export default function GamePage() {
         // Банкротство бота
         const netFlow = (botPlayer.profession?.salary ?? 0) + updatedPlayer.passive_income - updatedPlayer.total_expenses
         if (updatedPlayer.cash < 0 && netFlow < 0 && !(updatedPlayer as any).is_eliminated) {
-          updatedPlayer = { ...updatedPlayer, is_eliminated: true }
+          updatedPlayer = { ...updatedPlayer, ...({ is_eliminated: true } as any) }
           botEvents.push({ id: crypto.randomUUID(), round: botR, player_id: botPlayer.id, player_name: botPlayer.name, type: 'hit', description: `${botPlayer.name} выбывает — банкротство`, created_at: new Date().toISOString() })
         }
 
