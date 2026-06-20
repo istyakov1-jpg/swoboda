@@ -759,6 +759,7 @@ useEffect(() => {
       setDiceValue(roll1)
       if (roll2 !== null) setDiceValue2(roll2)
       setRolling(false)
+      isRollingRef.current = false // сбрасываем сразу после анимации, не ждём DB
       bc?.send({ type: 'broadcast', event: 'rolled', payload: { player_id: myPlayerId, roll } })
       const { player: movedPlayer, cell, passed_salary, salary_count } = movePlayer(myPlayer, roll, boardCells)
       let updatedPlayer = movedPlayer
@@ -898,7 +899,6 @@ useEffect(() => {
         return
       }
 
-      isRollingRef.current = false // сбрасываем защиту
       if (['opportunity','hit','event','auction','market','child','charity'].includes(cell.type)) {
         setTimeout(() => setShowTurnCard(true), 300)
       } else {
