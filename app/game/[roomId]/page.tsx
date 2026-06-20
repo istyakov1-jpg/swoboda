@@ -735,8 +735,11 @@ useEffect(() => {
   }
 
   async function handleRoll() {
-    if (!isMyTurn || rolling || !myPlayer || !gameState) return
-    if (isRollingRef.current) return // синхронная защита от двойного нажатия
+    if (!isMyTurn || rolling || !myPlayer || !gameState) {
+      console.log('[handleRoll] blocked:', { isMyTurn, rolling, hasPlayer: !!myPlayer, hasState: !!gameState })
+      return
+    }
+    if (isRollingRef.current) { console.log('[handleRoll] blocked by isRollingRef'); return }
     isRollingRef.current = true
     if ((myPlayer as any).is_eliminated) { isRollingRef.current = false; advanceTurn(gameState); return }
     // Двойной кубик (благотворительность)
