@@ -324,22 +324,24 @@ export default function GamePage() {
   // Синхронизируем refs
   useEffect(() => { roomStatusRef.current = roomStatus }, [roomStatus])
   gameStateRef.current = gameState // обновляется при каждом рендере, без useEffect
+  // ref чтобы бот-эффект всегда видел актуальное значение без добавления в deps
+  const effectiveHostRef = useRef(false)
+  effectiveHostRef.current = effectiveHost
 
   useEffect(() => {
     if (!gameState || !currentPlayer?.is_bot) return
     // Анимация кубика для всех
     let botAnimCount = 0
     const botAnim = setInterval(() => { setDiceValue(Math.floor(Math.random()*6)+1); if(++botAnimCount>10) clearInterval(botAnim) }, 80)
-    // Ход только у хоста
-    if (!isHost) {
-      return () => { clearInterval(botAnim) }
-    }
+
     const timer = setTimeout(async () => {
-      // Используем свежий стейт из ref — закрытие над gameState может быть устаревшим через 1500мс
+      // Проверяем через ref — isHost мог быть false при запуске эффекта, но стать true к моменту срабатывания
+      if (!effectiveHostRef.current) return
       const gs = gameStateRef.current
       if (!gs) return
-      const botPlayer = gs.players.find((p: any) => p.id === currentPlayer.id)
-      if (!botPlayer) return // бот уже убран из игры
+      // Если ход уже передан другому игроку — не делаем ничего
+      if (gs.players[0]?.id !== currentPlayer.id) return
+      const botPlayer = gs.players[0]
 
       setAnyoneRolling(false)
 
