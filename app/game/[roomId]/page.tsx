@@ -848,11 +848,11 @@ useEffect(() => {
 
       isRollingRef.current = false // сбрасываем защиту
       if (['opportunity','hit','event','auction','market','child','charity'].includes(cell.type)) {
-        setTimeout(() => setShowTurnCard(true), 400)
+        setTimeout(() => setShowTurnCard(true), 300)
       } else {
-        setTimeout(() => advanceTurn(newState), 800)
+        setTimeout(() => advanceTurn(newState), 500)
       }
-    }, 800)
+    }, 400)
   }
 
   async function handleBuy(asset: any) {
@@ -1323,7 +1323,7 @@ useEffect(() => {
 
 <div className="px-5 pb-4 pt-2" style={{height:78,flexShrink:0}}>
               {isMyTurn ? (
-                <button onClick={handleRoll} disabled={rolling}
+                <button onPointerDown={handleRoll} disabled={rolling}
                   className="flex w-full h-full items-center justify-between rounded-[18px] px-4 disabled:opacity-50"
                   style={{
                     background: isSkippingTurn
