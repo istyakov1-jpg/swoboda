@@ -194,6 +194,7 @@ export default function GamePage() {
   const bcChannelRef = useRef<any>(null)
   const latestStateRef = useRef<any>(null) // последний сохранённый стейт после броска
   const isRollingRef = useRef(false) // синхронная защита от двойного нажатия
+  const isAdvancingRef = useRef(false) // защита от двойного advanceTurn
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
   const [roomStatus, setRoomStatus] = useState<string>('lobby')
   const [roomCode, setRoomCode] = useState('')
@@ -227,8 +228,8 @@ export default function GamePage() {
     db.from('rooms').select('game_state, status, code, host_id').eq('id', roomId).single()
       .then(({ data }: {data: any}) => {
         if (data) {
-          setGameState(data.game_state)
-          setRoomStatus(data.status)
+          setGameState(gs => gs ?? data.game_state) // не перезаписываем если realtime уже пришёл
+          setRoomStatus(prev => prev === 'playing' ? 'playing' : data.status) // не откатываем playing → lobby
           setRoomCode(data.code)
           setIsHost(data.host_id === pid)
         }
@@ -977,10 +978,13 @@ useEffect(() => {
 
   async function advanceTurn(state: any) {
     if (!state) return
+    if (isAdvancingRef.current) return // защита от двойного вызова
+    isAdvancingRef.current = true
+    setTimeLeft(TIME_LIMIT) // сбрасываем таймер чтобы не застрять на 0
     const [current, ...rest] = state.players
-    console.log('[ADVANCE] current:', current?.name, '→ next:', rest[0]?.name, 'players count:', state.players?.length)
     const { error } = await db.from('rooms').update({ game_state: { ...state, players: [...rest, current], rolling_player_id: null } }).eq('id', roomId)
-    console.log('[ADVANCE] DB error:', error)
+    isAdvancingRef.current = false
+    if (error) console.error('[ADVANCE] DB error:', error)
   }
 
   if (!gameState || !myPlayerId) return (
