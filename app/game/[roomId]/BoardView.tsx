@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, memo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BOARD_CELLS, type Cell } from '@/lib/gameData'
 import type { Player } from '@/types/database'
 
@@ -35,7 +35,7 @@ const shade = (hex: string, amt: number) => {
   return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1)
 }
 
-const BoardView = memo(function BoardView({ myPlayer, gameState, boardView, setBoardView, isMyTurn, rolling, onRoll, diceValue, boardCells: propBoardCells }: Props) {
+export default function BoardView({ myPlayer, gameState, boardView, setBoardView, isMyTurn, rolling, onRoll, diceValue, boardCells: propBoardCells }: Props) {
   const cells = propBoardCells ?? BOARD_CELLS
   const N = cells.length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -511,6 +511,4 @@ const BoardView = memo(function BoardView({ myPlayer, gameState, boardView, setB
       </div>{/* /контент */}
     </div>
   )
-})
-
-export default BoardView
+}
