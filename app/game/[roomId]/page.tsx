@@ -197,6 +197,7 @@ export default function GamePage() {
   const isAdvancingRef = useRef(false) // защита от двойного advanceTurn
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
   const [roomStatus, setRoomStatus] = useState<string>('lobby')
+  const [startingGame, setStartingGame] = useState(false)
   const [roomCode, setRoomCode] = useState('')
   const [isHost, setIsHost] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -1003,7 +1004,6 @@ useEffect(() => {
     </div>
   )
 
-  const [startingGame, setStartingGame] = useState(false)
   async function startGame() {
     if (startingGame) return
     setStartingGame(true)
