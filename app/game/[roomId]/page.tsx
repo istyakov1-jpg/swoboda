@@ -196,6 +196,8 @@ export default function GamePage() {
   const isRollingRef = useRef(false) // синхронная защита от двойного нажатия
   const isAdvancingRef = useRef(false) // защита от двойного advanceTurn
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
+  const roomStatusRef = useRef<string>('lobby') // синхронная копия roomStatus для polling
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [roomStatus, setRoomStatus] = useState<string>('lobby')
   const [startingGame, setStartingGame] = useState(false)
   const [gameStarting, setGameStarting] = useState(false) // "Запускается..." для не-хоста
@@ -295,24 +297,30 @@ export default function GamePage() {
       })
       .subscribe()
 
-    // Polling: пока в лобби — проверяем БД каждые 3 секунды (запасной механизм)
-    const pollInterval = setInterval(() => {
-      setRoomStatus(prev => {
-        if (prev !== 'lobby') { clearInterval(pollInterval); return prev }
-        db.from('rooms').select('game_state, status').eq('id', roomId).single()
-          .then(({ data }: {data: any}) => {
-            if (data?.status === 'playing') { setGameState(data.game_state); setRoomStatus('playing') }
-          })
-        return prev
-      })
+    // Polling: ТОЛЬКО пока в лобби — проверяем БД каждые 3 секунды (запасной механизм)
+    pollIntervalRef.current = setInterval(async () => {
+      if (roomStatusRef.current !== 'lobby') {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+        return
+      }
+      const { data } = await db.from('rooms').select('game_state, status').eq('id', roomId).single() as {data: any}
+      if (data?.status === 'playing') {
+        roomStatusRef.current = 'playing'
+        setGameState(data.game_state)
+        setRoomStatus('playing')
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+      }
     }, 3000)
 
     return () => {
       supabase.removeChannel(channel)
       supabase.removeChannel(bcChannel)
-      clearInterval(pollInterval)
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     }
   }, [roomId])
+
+  // Синхронизируем ref чтобы polling видел актуальный статус
+  useEffect(() => { roomStatusRef.current = roomStatus }, [roomStatus])
 
   useEffect(() => {
     if (!gameState || !currentPlayer?.is_bot) return
