@@ -1077,6 +1077,7 @@ useEffect(() => {
   const isSkippingTurn = skipTurnsLeft > 0
   const doubleDiceActive = ((myPlayer as any)?.double_dice_rounds ?? 0) > 0
   const doubleDiceLeft = (myPlayer as any)?.double_dice_rounds ?? 0
+  const onTimerTick = useCallback(() => setTimeLeft(p => p - 1), [])
 
   const evCfg = useMemo(() => ({
     roll:        { icon:'die',       label:'Ход',        color:'rgba(255,255,255,0.5)' },
@@ -1131,7 +1132,7 @@ useEffect(() => {
         timeLeft={timeLeft}
         timeLimit={TIME_LIMIT}
         isMyTurn={isMyTurn}
-        onTick={useCallback(() => setTimeLeft(p => p - 1), [])}
+        onTick={onTimerTick}
         showBankrupt={showBankrupt}
         showEmergency={showEmergency}
       />
