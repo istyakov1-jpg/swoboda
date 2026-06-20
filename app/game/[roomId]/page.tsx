@@ -2633,8 +2633,7 @@ useEffect(() => {
         <input type="range" min={500} max={Math.max(500, Math.min(myPlayer?.cash ?? 0, 50000))} step={500}
           value={Math.min(giftAmount, Math.max(500, Math.min(myPlayer?.cash ?? 0, 50000)))}
           onChange={e=>setGiftAmount(Number(e.target.value))}
-          className="w-full" disabled={(myPlayer?.cash ?? 0) < 500}
-          style={{ accentColor:'#F5B843' }} />
+          className="w-full" disabled={(myPlayer?.cash ?? 0) < 500} />
         <div className="flex justify-between mt-1 text-[10px] text-faint">
           <span>₽500</span><span>₽{Math.min(myPlayer?.cash ?? 0, 50000).toLocaleString()} (у тебя)</span>
         </div>
@@ -2962,7 +2961,7 @@ useEffect(() => {
                         <span className="text-[13px] font-extrabold text-gold">{marketQty} шт · ₽{marketCost.toLocaleString()}</span>
                       </div>
                       <input type="range" min={1} max={maxMarketQty} value={marketQty}
-                        onChange={e=>setMarketQty(Number(e.target.value))} className="w-full" style={{accentColor:'#60A5FA'}}/>
+                        onChange={e=>setMarketQty(Number(e.target.value))} className="w-full blue-range"/>
                       <div className="flex justify-between mt-1 text-[10px] text-faint">
                         <span>1 шт</span><span>{maxMarketQty} шт (макс · ₽{myPlayer.cash.toLocaleString()} у тебя)</span>
                       </div>
