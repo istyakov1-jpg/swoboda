@@ -1058,26 +1058,28 @@ useEffect(() => {
     )
   }
 
-  if (!myPlayer) return null
-
+  // useMemo/useCallback ДОЛЖНЫ быть до return — Rules of Hooks
   const keyRate: number = gameState?.key_rate ?? KEY_RATE_DEFAULT
   const gameSettings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(gameState?.settings ?? {}) }), [gameState?.settings])
   const diffConfig = useMemo(() => DIFFICULTY_CONFIG[(gameSettings.difficulty ?? 'normal') as GameDifficulty], [gameSettings.difficulty])
   const boardCells = useMemo(() => getBoardCells((gameSettings.difficulty ?? 'normal') as GameDifficulty), [gameSettings.difficulty])
-  const progress = useMemo(() => freedomProgress(myPlayer), [myPlayer.passive_income, myPlayer.total_expenses, myPlayer.debts])
+  const progress = useMemo(() => myPlayer ? freedomProgress(myPlayer) : 0, [myPlayer?.passive_income, myPlayer?.total_expenses, myPlayer?.debts])
   const total = boardCells.length
-  const pos = myPlayer.position
-  const visibleCells = useMemo(() => [-3,-2,-1,0,1,2,3].map(d => ({ cell: boardCells[(pos+d+total)%total], isCurrent: d===0, dist: Math.abs(d) })), [pos, boardCells, total])
-  const creditLimit = useMemo(() => getCreditLimit(myPlayer), [myPlayer.passive_income, myPlayer.total_expenses])
-  const usedDebtMonthly = useMemo(() => getTotalDebtPayments(myPlayer), [myPlayer.debts])
-  const maxMarketQty = useMemo(() => marketData ? Math.max(0, Math.floor(myPlayer.cash / marketData.newPrice)) : 0, [marketData?.newPrice, myPlayer.cash])
+  const creditLimit = useMemo(() => myPlayer ? getCreditLimit(myPlayer) : 0, [myPlayer?.passive_income, myPlayer?.total_expenses])
+  const usedDebtMonthly = useMemo(() => myPlayer ? getTotalDebtPayments(myPlayer) : 0, [myPlayer?.debts])
+  const maxMarketQty = useMemo(() => (marketData && myPlayer) ? Math.max(0, Math.floor(myPlayer.cash / marketData.newPrice)) : 0, [marketData?.newPrice, myPlayer?.cash])
   const marketCost = useMemo(() => marketData ? marketData.newPrice * marketQty : 0, [marketData?.newPrice, marketQty])
   const notifAccent = useMemo(() => cashNotif ? (cashNotif.positive ? '#34D399' : '#FB6B6B') : '#34D399', [cashNotif])
+  const onTimerTick = useCallback(() => setTimeLeft(p => p - 1), [])
+
+  if (!myPlayer) return null
+
+  const pos = myPlayer.position
+  const visibleCells = [-3,-2,-1,0,1,2,3].map(d => ({ cell: boardCells[(pos+d+total)%total], isCurrent: d===0, dist: Math.abs(d) }))
   const skipTurnsLeft = (myPlayer as any)?.skip_turns ?? 0
   const isSkippingTurn = skipTurnsLeft > 0
   const doubleDiceActive = ((myPlayer as any)?.double_dice_rounds ?? 0) > 0
   const doubleDiceLeft = (myPlayer as any)?.double_dice_rounds ?? 0
-  const onTimerTick = useCallback(() => setTimeLeft(p => p - 1), [])
 
   const evCfg = useMemo(() => ({
     roll:        { icon:'die',       label:'Ход',        color:'rgba(255,255,255,0.5)' },
