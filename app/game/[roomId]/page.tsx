@@ -225,15 +225,8 @@ export default function GamePage() {
     if (!pid) { router.push('/lobby'); return }
     setMyPlayerId(pid)
     if (!localStorage.getItem(`svoboda_intro_${roomId}`)) setShowIntro(true)
-    db.from('rooms').select('game_state, status, code, host_id').eq('id', roomId).single()
-      .then(({ data }: {data: any}) => {
-        if (data) {
-          setGameState((gs: any) => gs ?? data.game_state) // не перезаписываем если realtime уже пришёл
-          setRoomStatus(prev => prev === 'playing' ? 'playing' : data.status) // не откатываем playing → lobby
-          setRoomCode(data.code)
-          setIsHost(data.host_id === pid)
-        }
-      })
+
+    // Сначала подписываемся, и только после SUBSCRIBED делаем fetch — иначе теряем события
     const channel = supabase.channel(`room-${roomId}`)
     channel
       .on('postgres_changes',
@@ -241,9 +234,23 @@ export default function GamePage() {
         (payload: any) => {
           setGameState(payload.new.game_state)
           setRoomStatus(payload.new.status)
+          if (payload.new.host_id) setIsHost(payload.new.host_id === pid)
         }
       )
-      .subscribe()
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          // Подписка активна — теперь безопасно читать начальное состояние
+          db.from('rooms').select('game_state, status, code, host_id').eq('id', roomId).single()
+            .then(({ data }: {data: any}) => {
+              if (data) {
+                setGameState((gs: any) => gs ?? data.game_state)
+                setRoomStatus(prev => prev === 'playing' ? 'playing' : data.status)
+                setRoomCode(data.code)
+                setIsHost(data.host_id === pid)
+              }
+            })
+        }
+      })
     channelRef.current = channel
 
     const bcChannel = supabase.channel(`bc-${roomId}`)
@@ -996,10 +1003,14 @@ useEffect(() => {
     </div>
   )
 
+  const [startingGame, setStartingGame] = useState(false)
   async function startGame() {
+    if (startingGame) return
+    setStartingGame(true)
     const initState = gameState ? { ...gameState, key_rate: KEY_RATE_DEFAULT, game_started_at: new Date().toISOString() } : { key_rate: KEY_RATE_DEFAULT, game_started_at: new Date().toISOString() }
     await db.from('rooms').update({ status: 'playing', game_state: initState }).eq('id', roomId)
     setRoomStatus('playing')
+    setStartingGame(false)
   }
 
   function copyCode() {
@@ -1083,11 +1094,20 @@ useEffect(() => {
             {/* CTA */}
             <div className="mt-6">
               {isHost ? (
-                <button onClick={startGame}
-                  className="gold-grad flex w-full items-center justify-center gap-2 rounded-[20px] p-[17px] text-[17px] font-extrabold text-[#1A1206]"
+                <button onPointerDown={startGame} disabled={startingGame}
+                  className="gold-grad flex w-full items-center justify-center gap-2 rounded-[20px] p-[17px] text-[17px] font-extrabold text-[#1A1206] active:scale-95 transition-transform disabled:opacity-70"
                   style={{ boxShadow: '0 18px 40px -12px rgba(245,184,67,.65)' }}>
-                  Начать игру
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  {startingGame ? (
+                    <>
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#1A1206]/30 border-t-[#1A1206]" />
+                      Запускаем...
+                    </>
+                  ) : (
+                    <>
+                      Начать игру
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </>
+                  )}
                 </button>
               ) : (
                 <div className="flex items-center justify-center gap-3 rounded-[20px] border border-white/[0.08] bg-white/[0.04] p-[17px]">
