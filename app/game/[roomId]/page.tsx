@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { rollDice, movePlayer, collectSalary, buyAsset, freedomProgress, netPassiveIncome, baseExpenses, botDecide, getCreditLimit, getTotalDebtPayments, repayDebt, takeCredit, calcDividends } from '@/lib/gameEngine'
@@ -8,6 +8,7 @@ import { ASSETS, BOARD_CELLS, SMALL_DEALS, LARGE_DEALS, STOCKS, CRYPTO, CREDIT_P
 import type { Player } from '@/types/database'
 import { IconCoins, IconBars, IconBolt, IconOpportunity, IconEvent, IconGavel, IconDice, IconTrendUp, IconLayers, IconWallet, IconPeople, IconList, GameIcon, IconSalary, IconSell, IconHit, IconRepay, IconCredit, IconFreedom, IconBaby, IconCharity, IconSkull, IconAlert, IconNews, IconDeal, IconHandshake, IconTrophy, IconSettings, IconAnalytics, IconDDS, IconDie } from '@/components/icons'
 import BoardView from './BoardView'
+import GameTimer from './components/GameTimer'
 import { Dice3D } from './Dice3D'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -548,20 +549,17 @@ useEffect(() => {
   }
 }, [isMyTurn, myPlayer?.cash, myPlayer?.passive_income, myPlayer?.total_expenses, (myPlayer as any)?.is_eliminated])
 
-// Отсчёт таймера
+// Отсчёт таймера — обработка истечения (тик вынесен в GameTimer)
 useEffect(() => {
   if (roomStatus !== 'playing' || !gameState) return
-  if (showBankrupt || showEmergency) return // не обрабатываем таймер во время экранов банкротства/кризиса
+  if (showBankrupt || showEmergency) return
   if (timeLeft <= 0) {
     if (isMyTurn && !rolling) {
       if (!hasRolled) handleRoll()
       else { setShowTurnCard(false); advanceTurn(gameState) }
     }
-    return
   }
-  const t = setTimeout(() => setTimeLeft(prev => prev - 1), 1000)
-  return () => clearTimeout(t)
-}, [timeLeft, roomStatus, gameState, hasRolled])
+}, [timeLeft, roomStatus, isMyTurn, rolling, hasRolled, showBankrupt, showEmergency])
 
 // Глобальный таймер игры
 useEffect(() => {
@@ -936,13 +934,11 @@ useEffect(() => {
     advanceTurn(newState)
   }
 
-  async function advanceTurn(state: any) {
+  const advanceTurn = useCallback(async function advanceTurn(state: any) {
     if (!state) return
     const [current, ...rest] = state.players
-    console.log('[ADVANCE] current:', current?.name, '→ next:', rest[0]?.name, 'players count:', state.players?.length)
-    const { error } = await db.from('rooms').update({ game_state: { ...state, players: [...rest, current], rolling_player_id: null } }).eq('id', roomId)
-    console.log('[ADVANCE] DB error:', error)
-  }
+    await db.from('rooms').update({ game_state: { ...state, players: [...rest, current], rolling_player_id: null } }).eq('id', roomId)
+  }, [roomId])
 
   if (!gameState || !myPlayerId) return (
     <div className="flex min-h-screen items-center justify-center bg-[#07070D]">
@@ -1065,24 +1061,24 @@ useEffect(() => {
   if (!myPlayer) return null
 
   const keyRate: number = gameState?.key_rate ?? KEY_RATE_DEFAULT
-  const gameSettings = { ...DEFAULT_SETTINGS, ...(gameState?.settings ?? {}) }
-  const diffConfig = DIFFICULTY_CONFIG[(gameSettings.difficulty ?? 'normal') as GameDifficulty]
-  const boardCells = getBoardCells((gameSettings.difficulty ?? 'normal') as GameDifficulty)
-  const progress = freedomProgress(myPlayer)
+  const gameSettings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(gameState?.settings ?? {}) }), [gameState?.settings])
+  const diffConfig = useMemo(() => DIFFICULTY_CONFIG[(gameSettings.difficulty ?? 'normal') as GameDifficulty], [gameSettings.difficulty])
+  const boardCells = useMemo(() => getBoardCells((gameSettings.difficulty ?? 'normal') as GameDifficulty), [gameSettings.difficulty])
+  const progress = useMemo(() => freedomProgress(myPlayer), [myPlayer.passive_income, myPlayer.total_expenses, myPlayer.debts])
   const total = boardCells.length
   const pos = myPlayer.position
-  const visibleCells = [-3,-2,-1,0,1,2,3].map(d => ({ cell: boardCells[(pos+d+total)%total], isCurrent: d===0, dist: Math.abs(d) }))
-  const creditLimit = getCreditLimit(myPlayer)
-  const usedDebtMonthly = getTotalDebtPayments(myPlayer)
-  const maxMarketQty = marketData ? Math.max(0, Math.floor(myPlayer.cash / marketData.newPrice)) : 0
-  const marketCost = marketData ? marketData.newPrice * marketQty : 0
-  const notifAccent = cashNotif ? (cashNotif.positive ? '#34D399' : '#FB6B6B') : '#34D399'
+  const visibleCells = useMemo(() => [-3,-2,-1,0,1,2,3].map(d => ({ cell: boardCells[(pos+d+total)%total], isCurrent: d===0, dist: Math.abs(d) })), [pos, boardCells, total])
+  const creditLimit = useMemo(() => getCreditLimit(myPlayer), [myPlayer.passive_income, myPlayer.total_expenses])
+  const usedDebtMonthly = useMemo(() => getTotalDebtPayments(myPlayer), [myPlayer.debts])
+  const maxMarketQty = useMemo(() => marketData ? Math.max(0, Math.floor(myPlayer.cash / marketData.newPrice)) : 0, [marketData?.newPrice, myPlayer.cash])
+  const marketCost = useMemo(() => marketData ? marketData.newPrice * marketQty : 0, [marketData?.newPrice, marketQty])
+  const notifAccent = useMemo(() => cashNotif ? (cashNotif.positive ? '#34D399' : '#FB6B6B') : '#34D399', [cashNotif])
   const skipTurnsLeft = (myPlayer as any)?.skip_turns ?? 0
   const isSkippingTurn = skipTurnsLeft > 0
   const doubleDiceActive = ((myPlayer as any)?.double_dice_rounds ?? 0) > 0
   const doubleDiceLeft = (myPlayer as any)?.double_dice_rounds ?? 0
 
-  const evCfg: Record<string,{icon:string,label:string,color:string,global?:boolean}> = {
+  const evCfg = useMemo(() => ({
     roll:        { icon:'die',       label:'Ход',        color:'rgba(255,255,255,0.5)' },
     buy:         { icon:'buy',       label:'Покупка',    color:'#34D399' },
     sell:        { icon:'sell',      label:'Продажа',    color:'#F5B843' },
@@ -1094,36 +1090,29 @@ useEffect(() => {
     freedom:     { icon:'freedom',   label:'Свобода!',   color:'#FBD888', global:true },
     auction_win: { icon:'trophy',    label:'Аукцион',    color:'#F59E0B', global:true },
     child:       { icon:'child',     label:'Ребёнок',    color:'#F5B843', global:true },
-  }
-  // Новые события сверху
-  const journalAllEvents: any[] = [...(gameState?.events??[])].reverse()
-  const journalFiltered = journalAllEvents.filter((ev:any)=>{
+  } as Record<string,{icon:string,label:string,color:string,global?:boolean}>), [])
+
+  const journalAllEvents = useMemo(() => [...(gameState?.events??[])].reverse(), [gameState?.events])
+  const journalFiltered = useMemo(() => journalAllEvents.filter((ev:any)=>{
     if(journalFilter==='mine')   return ev.player_id===myPlayerId
-    if(journalFilter==='global') return !!evCfg[ev.type]?.global
+    if(journalFilter==='global') return !!(evCfg[ev.type] as any)?.global
     if(journalFilter==='money')  return ['buy','sell','hit','salary','repay','credit','auction_win'].includes(ev.type) && ev.amount != null && ev.amount !== 0
-    return ev.type !== 'roll' // в "Все" скрываем броски кубика
-  })
+    return ev.type !== 'roll'
+  }), [journalAllEvents, journalFilter, myPlayerId, evCfg])
   // Группировка активов — акции/крипта суммируются по базовому названию
-  const groupedAssets = (() => {
+  const groupedAssets = useMemo(() => {
     const result: any[] = []
     const map: Record<string, any> = {}
     myPlayer.assets.forEach((a:any) => {
       if (a.type === 'stocks' || a.type === 'crypto') {
         const base = a.name.replace(/ x\d+$/, '')
         const qty = parseInt(a.name.match(/x(\d+)$/)?.[1] ?? '1')
-        if (map[base]) {
-          map[base].qty += qty
-          map[base].price += a.price
-        } else {
-          map[base] = { ...a, base, qty, price: a.price }
-          result.push({ _grouped: true, _base: base })
-        }
-      } else {
-        result.push({ ...a, _grouped: false })
-      }
+        if (map[base]) { map[base].qty += qty; map[base].price += a.price }
+        else { map[base] = { ...a, base, qty, price: a.price }; result.push({ _grouped: true, _base: base }) }
+      } else { result.push({ ...a, _grouped: false }) }
     })
     return result.map((g:any) => g._grouped ? { ...map[g._base], name: `${g._base} ×${map[g._base].qty}` } : g)
-  })()
+  }, [myPlayer.assets])
 
   const marketHoldings = marketData ? myPlayer.assets.filter((a:any)=>a.name?.includes(marketData.name)||a.id?.startsWith(marketData.id)) : []
   const marketHeldQty = marketHoldings.reduce((s:number,a:any)=>{const m=a.name?.match(/x(\d+)/);return s+(m?parseInt(m[1]):1)},0)
@@ -1138,6 +1127,14 @@ useEffect(() => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#07070D]">
+      <GameTimer
+        timeLeft={timeLeft}
+        timeLimit={TIME_LIMIT}
+        isMyTurn={isMyTurn}
+        onTick={useCallback(() => setTimeLeft(p => p - 1), [])}
+        showBankrupt={showBankrupt}
+        showEmergency={showEmergency}
+      />
       <div className="relative w-[390px] overflow-hidden rounded-[52px] border border-white/[0.08]" style={{ height:'100vh', maxHeight:'844px', background:'#0B0B13' }}>
 
         {notification && (
