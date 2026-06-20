@@ -563,33 +563,20 @@ useEffect(() => {
   }
 }, [isMyTurn, myPlayer?.cash, myPlayer?.passive_income, myPlayer?.total_expenses, (myPlayer as any)?.is_eliminated])
 
-// Таймер хода — ref для реального значения (не вызывает ре-рендер каждую секунду)
-const timeLeftRef = useRef(timeLeft)
-timeLeftRef.current = timeLeft
-
+// Отсчёт таймера хода
 useEffect(() => {
   if (roomStatus !== 'playing' || !gameState) return
   if (showBankrupt || showEmergency) return
-  const interval = setInterval(() => {
-    const current = timeLeftRef.current
-    if (current <= 1) {
-      clearInterval(interval)
-      setTimeLeft(0)
-    } else {
-      setTimeLeft(current - 1)
+  if (timeLeft <= 0) {
+    if (isMyTurn && !rolling) {
+      if (!hasRolled) handleRoll()
+      else { setShowTurnCard(false); advanceTurn(gameState) }
     }
-  }, 1000)
-  return () => clearInterval(interval)
-// Только перезапускаем когда меняется ход или статус
-}, [isMyTurn, roomStatus, showBankrupt, showEmergency])
-
-// Обработка истечения таймера
-useEffect(() => {
-  if (timeLeft <= 0 && roomStatus === 'playing' && isMyTurn && !rolling && !showBankrupt && !showEmergency) {
-    if (!hasRolled) handleRoll()
-    else { setShowTurnCard(false); advanceTurn(gameState) }
+    return
   }
-}, [timeLeft, isMyTurn, rolling, hasRolled, showBankrupt, showEmergency])
+  const t = setTimeout(() => setTimeLeft(prev => prev - 1), 1000)
+  return () => clearTimeout(t)
+}, [timeLeft, roomStatus, gameState, hasRolled, showBankrupt, showEmergency])
 
 // Глобальный таймер игры
 useEffect(() => {
