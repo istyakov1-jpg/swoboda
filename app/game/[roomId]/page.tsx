@@ -345,7 +345,7 @@ export default function GamePage() {
         const [skipCur, ...skipRest] = allPlayers // ротируем — иначе игра застрянет на боте
         const skipEv = { id: crypto.randomUUID(), round: gameState?.round??1, player_id: currentPlayer.id, player_name: currentPlayer.name, type: 'hit', description: `${currentPlayer.name} пропускает ход (осталось: ${remaining})`, created_at: new Date().toISOString() }
         const skipState = { ...gameState, players: [...skipRest, skipCur], events: [skipEv, ...(gameState.events||[])].slice(0,50) }
-        await db.from('rooms').update({ game_state: skipState }).eq('id', roomId)
+        await wgs(skipState, currentPlayer.id)
         return
       }
 
@@ -450,7 +450,7 @@ if (cell.type === 'market') {
   }
 }
 
-await db.from('rooms').update({ game_state: botNewState }).eq('id', roomId)
+await wgs(botNewState, currentPlayer.id)
     }, 1500)
     return () => { clearTimeout(timer); clearInterval(botAnim) }
   }, [gameState?.players?.[0]?.id])
@@ -616,7 +616,7 @@ useEffect(() => {
     const ev = { id: crypto.randomUUID(), round: gameState.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} пропускает ход${remaining > 0 ? ` (осталось: ${remaining})` : ' — возвращается в игру!'}`, created_at: new Date().toISOString() }
     const newState = { ...gameState, players: [...skipRest, skipCur], events: [ev, ...(gameState.events||[])].slice(0,50) }
     latestStateRef.current = newState
-    await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+    await wgs(newState)
   }, 1500)
   return () => clearTimeout(t)
 }, [isMyTurn, (myPlayer as any)?.skip_turns])
@@ -646,7 +646,7 @@ useEffect(() => {
         const newPlayers = gameState.players.map((p:any) => p.id === myPlayerId ? {...p, is_eliminated: true} : p)
         const newState = {...gameState, players: newPlayers, events: [ev, ...(gameState.events||[])].slice(0,50)}
         latestStateRef.current = newState
-        await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+        await wgs(newState)
         setShowBankrupt(true)
       }
       doEliminate()
@@ -664,8 +664,12 @@ useEffect(() => {
       if (!hasRolled) handleRoll()
       else { setShowTurnCard(false); advanceTurn(gameStateRef.current) }
     } else if (isHost && !rolling) {
-      // Застрял чужой ход — хост форсирует продолжение
-      advanceTurn(gameStateRef.current)
+      // Форсируем только если игрок ещё не начал бросок (нет rolling_player_id)
+      // Иначе это создаёт race condition с его own advanceTurn
+      const gs = gameStateRef.current
+      if (!gs?.rolling_player_id) {
+        advanceTurn(gs)
+      }
     }
     return
   }
@@ -734,6 +738,15 @@ useEffect(() => {
 }, [roomStatus])
 
   function showNotif(msg: string, color = '#34D399') { setNotification({msg,color}); setTimeout(() => setNotification(null), 2500) }
+
+  // Атомарная запись стейта через RPC — отклоняет запись если не ход этого игрока
+  async function wgs(state: any, playerId?: string) {
+    await db.rpc('write_game_state', {
+      p_room_id: roomId,
+      p_player_id: playerId ?? myPlayerId,
+      p_new_state: state,
+    })
+  }
 
   function showCashNotif(label: string, amount: number, positive: boolean, color?: string, type?: string) {
     // Верхний баннер показывается ВСЕГДА — не зависит от настроек
@@ -868,7 +881,7 @@ useEffect(() => {
         }
       }
       latestStateRef.current = newState
-      await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+      await wgs(newState)
 
       const prefs = notifPrefsRef.current
 
@@ -882,7 +895,7 @@ useEffect(() => {
         latestStateRef.current = autoState
         showCashNotif(pickedHit.desc, amount, false)
         snd.hit()
-        await db.from('rooms').update({ game_state: autoState }).eq('id', roomId)
+        await wgs(autoState)
         setTimeout(() => advanceTurn(autoState), 800)
         return
       }
@@ -927,8 +940,8 @@ useEffect(() => {
     snd.buy()
     showCashNotif(asset.name, selectedDeal.down_payment, false)
     setShowTurnCard(false)
-    if (updatedPlayer.is_free) { await db.from('rooms').update({ game_state: newState }).eq('id', roomId); return } // победа поймается через useEffect
-    await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+    if (updatedPlayer.is_free) { await wgs(newState); return } // победа поймается через useEffect
+    await wgs(newState)
     advanceTurn(newState)
   }
 
@@ -948,7 +961,7 @@ useEffect(() => {
         const newState = { ...baseState, players: newPlayers, events: [newEvent, ...(baseState.events||[])].slice(0,50) }
         latestStateRef.current = newState
         if (salaryLoss > 0) showCashNotif(`Потеря зарплаты: ${pickedHit.desc}`, salaryLoss, false)
-        await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+        await wgs(newState)
         advanceTurn(newState); return
       }
       const amount = Math.round(pickedHit.amount * diffConfig.hit_multiplier)
@@ -960,7 +973,7 @@ useEffect(() => {
       const newPlayers = baseState.players.map((p: Player) => p.id === myPlayerId ? updatedPlayer : p)
       const newEvent = { id: crypto.randomUUID(), round: baseState?.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} — ${pickedHit.desc}: −₽${amount.toLocaleString()}`, amount, created_at: new Date().toISOString() }
       const newState = { ...baseState, players: newPlayers, events: [newEvent, ...(baseState.events||[])].slice(0,50) }
-      await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+      await wgs(newState)
       // Экстренный экран при наличных < -10K (раньше выбывания)
       if (newCash < -10000) {
         latestStateRef.current = newState
@@ -971,7 +984,7 @@ useEffect(() => {
         const elimEvent = { id: crypto.randomUUID(), round: baseState?.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} выбывает — отрицательный денежный поток!`, created_at: new Date().toISOString() }
         const elimState = { ...newState, players: newState.players.map((p:any)=>p.id===myPlayerId?{...p,is_eliminated:true}:p), events: [elimEvent,...newState.events].slice(0,50) }
         latestStateRef.current = elimState
-        await db.from('rooms').update({ game_state: elimState }).eq('id', roomId)
+        await wgs(elimState)
         setTimeout(()=>sounds.drumroll(),200); setTimeout(()=>sounds.bankrupt(),1000); setShowBankrupt(true); return
       }
       advanceTurn(newState); return
@@ -986,7 +999,7 @@ useEffect(() => {
         const newEvent = { id: crypto.randomUUID(), round: baseState?.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'event', description: `${myPlayer.name}: ${pickedEvent.desc} +₽${bonus.toLocaleString()}`, amount: bonus, created_at: new Date().toISOString() }
         const newState = { ...baseState, players: newPlayers, events: [newEvent, ...(baseState.events||[])].slice(0,50) }
         showCashNotif(pickedEvent.desc, bonus, true, undefined, 'event'); snd.salary()
-        await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+        await wgs(newState)
         advanceTurn(newState); return
       }
 
@@ -998,7 +1011,7 @@ useEffect(() => {
         const newEvent = { id: crypto.randomUUID(), round: baseState?.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'event', description: `${myPlayer.name}: ${pickedEvent.desc} −₽${increase.toLocaleString()}/мес`, amount: -increase, created_at: new Date().toISOString() }
         const newState = { ...baseState, players: newPlayers, events: [newEvent, ...(baseState.events||[])].slice(0,50) }
         showCashNotif(pickedEvent.desc, increase, false, undefined, 'event')
-        await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+        await wgs(newState)
         advanceTurn(newState); return
       }
 
@@ -1007,7 +1020,7 @@ useEffect(() => {
         const newRate = parseFloat(effect.split(':')[1])
         const newEvent = { id: crypto.randomUUID(), round: baseState?.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'event', description: `${pickedEvent.desc}`, created_at: new Date().toISOString() }
         const newState = { ...baseState, key_rate: newRate, events: [newEvent, ...(baseState.events||[])].slice(0,50) }
-        await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+        await wgs(newState)
         advanceTurn(newState); return
       }
     }
@@ -1033,20 +1046,25 @@ useEffect(() => {
     snd.buy()
     showCashNotif(auctionAsset.name, bidAmount, false)
     setShowTurnCard(false)
-    await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+    await wgs(newState)
     advanceTurn(newState)
   }
 
   async function advanceTurn(state: any) {
-    if (!state) return
+    if (!state?.players?.[0]) return
     if (isAdvancingRef.current) return
     isAdvancingRef.current = true
     setTimeLeft(TIME_LIMIT)
-    const [current, ...rest] = state.players
+    const expectedPlayerId = state.players[0].id
     try {
-      await db.from('rooms').update({ game_state: { ...state, players: [...rest, current], rolling_player_id: null } }).eq('id', roomId)
+      // Атомарная ротация через PostgreSQL RPC — исключает race condition
+      // Если два клиента вызывают одновременно, второй просто получает уже повёрнутый стейт
+      await db.rpc('advance_turn_safe', {
+        p_room_id: roomId,
+        p_expected_player_id: expectedPlayerId,
+      })
     } finally {
-      isAdvancingRef.current = false // гарантированный сброс даже при ошибке сети
+      isAdvancingRef.current = false
     }
   }
 
@@ -1286,7 +1304,7 @@ useEffect(() => {
                   if (myPlayer.cash < offer.price) { showNotif('Недостаточно наличных', '#F87171'); return }
                   await handleAuctionBuy(offer.price)
                   const newState = { ...gameState, open_auction: null }
-                  await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+                  await wgs(newState)
                   setShowOpenAuctionModal(false)
                 }}
                 disabled={myPlayer.cash < (gameState.open_auction.price ?? 0)}
