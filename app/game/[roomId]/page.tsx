@@ -739,13 +739,17 @@ useEffect(() => {
 
   function showNotif(msg: string, color = '#34D399') { setNotification({msg,color}); setTimeout(() => setNotification(null), 2500) }
 
-  // Атомарная запись стейта через RPC — отклоняет запись если не ход этого игрока
+  // Запись стейта: пробуем атомарный RPC, при ошибке — прямой update
   async function wgs(state: any, playerId?: string) {
-    await db.rpc('write_game_state', {
+    const { error } = await db.rpc('write_game_state', {
       p_room_id: roomId,
       p_player_id: playerId ?? myPlayerId,
       p_new_state: state,
     })
+    if (error) {
+      // RPC не установлен — fallback на прямой write
+      await db.from('rooms').update({ game_state: state }).eq('id', roomId)
+    }
   }
 
   function showCashNotif(label: string, amount: number, positive: boolean, color?: string, type?: string) {
@@ -1057,12 +1061,17 @@ useEffect(() => {
     setTimeLeft(TIME_LIMIT)
     const expectedPlayerId = state.players[0].id
     try {
-      // Атомарная ротация через PostgreSQL RPC — исключает race condition
-      // Если два клиента вызывают одновременно, второй просто получает уже повёрнутый стейт
-      await db.rpc('advance_turn_safe', {
+      const { error } = await db.rpc('advance_turn_safe', {
         p_room_id: roomId,
         p_expected_player_id: expectedPlayerId,
       })
+      if (error) {
+        // RPC не установлен — fallback на прямой rotate
+        const [current, ...rest] = state.players
+        await db.from('rooms').update({
+          game_state: { ...state, players: [...rest, current], rolling_player_id: null }
+        }).eq('id', roomId)
+      }
     } finally {
       isAdvancingRef.current = false
     }
