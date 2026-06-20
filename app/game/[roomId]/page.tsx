@@ -193,6 +193,7 @@ export default function GamePage() {
   const channelRef = useRef<any>(null)
   const bcChannelRef = useRef<any>(null)
   const latestStateRef = useRef<any>(null) // последний сохранённый стейт после броска
+  const isRollingRef = useRef(false) // синхронная защита от двойного нажатия
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
   const [roomStatus, setRoomStatus] = useState<string>('lobby')
   const [roomCode, setRoomCode] = useState('')
@@ -280,6 +281,18 @@ export default function GamePage() {
     }
     const timer = setTimeout(async () => {
       setAnyoneRolling(false)
+
+      // Пропуск хода бота из-за сокращения/болезни
+      if ((currentPlayer as any).skip_turns > 0) {
+        const remaining = (currentPlayer as any).skip_turns - 1
+        const updatedBot = { ...currentPlayer, skip_turns: remaining }
+        const newPlayers = gameState.players.map((p: any) => p.id === currentPlayer.id ? updatedBot : p)
+        const skipEv = { id: crypto.randomUUID(), round: gameState?.round??1, player_id: currentPlayer.id, player_name: currentPlayer.name, type: 'hit', description: `${currentPlayer.name} пропускает ход (осталось: ${remaining})`, created_at: new Date().toISOString() }
+        const skipState = { ...gameState, players: newPlayers, events: [skipEv, ...(gameState.events||[])].slice(0,50) }
+        await db.from('rooms').update({ game_state: skipState }).eq('id', roomId)
+        return
+      }
+
       const roll = rollDice()
       setDiceValue(roll)
       const botDiff = (gameState?.settings?.difficulty ?? 'normal') as GameDifficulty
@@ -652,7 +665,9 @@ useEffect(() => {
 
   async function handleRoll() {
     if (!isMyTurn || rolling || !myPlayer || !gameState) return
-    if ((myPlayer as any).is_eliminated) { advanceTurn(gameState); return }
+    if (isRollingRef.current) return // синхронная защита от двойного нажатия
+    isRollingRef.current = true
+    if ((myPlayer as any).is_eliminated) { isRollingRef.current = false; advanceTurn(gameState); return }
     // Двойной кубик (благотворительность)
     const doubleDiceRounds = (myPlayer as any).double_dice_rounds ?? 0
 
@@ -822,6 +837,7 @@ useEffect(() => {
         return
       }
 
+      isRollingRef.current = false // сбрасываем защиту
       if (['opportunity','hit','event','auction','market','child','charity'].includes(cell.type)) {
         setTimeout(() => setShowTurnCard(true), 400)
       } else {
