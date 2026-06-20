@@ -193,6 +193,7 @@ export default function GamePage() {
   const channelRef = useRef<any>(null)
   const bcChannelRef = useRef<any>(null)
   const latestStateRef = useRef<any>(null) // последний сохранённый стейт после броска
+  const gameStateRef = useRef<any>(null) // всегда актуальный gameState без добавления в deps
   const isRollingRef = useRef(false) // синхронная защита от двойного нажатия
   const isAdvancingRef = useRef(false) // защита от двойного advanceTurn
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
@@ -319,8 +320,9 @@ export default function GamePage() {
     }
   }, [roomId])
 
-  // Синхронизируем ref чтобы polling видел актуальный статус
+  // Синхронизируем refs
   useEffect(() => { roomStatusRef.current = roomStatus }, [roomStatus])
+  gameStateRef.current = gameState // обновляется при каждом рендере, без useEffect
 
   useEffect(() => {
     if (!gameState || !currentPlayer?.is_bot) return
@@ -655,16 +657,18 @@ useEffect(() => {
     if (isMyTurn && !rolling) {
       // Мой ход истёк
       if (!hasRolled) handleRoll()
-      else { setShowTurnCard(false); advanceTurn(gameState) }
+      else { setShowTurnCard(false); advanceTurn(gameStateRef.current) }
     } else if (isHost && !rolling) {
       // Застрял чужой ход — хост форсирует продолжение
-      advanceTurn(gameState)
+      advanceTurn(gameStateRef.current)
     }
     return
   }
   const t = setTimeout(() => setTimeLeft(prev => prev - 1), 1000)
   return () => clearTimeout(t)
-}, [timeLeft, roomStatus, gameState, hasRolled, showBankrupt, showEmergency, isMyTurn, isHost, rolling])
+  // gameState убран из deps намеренно — используем gameStateRef чтобы таймер не сбрасывался при каждом DB update
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [timeLeft, roomStatus, hasRolled, showBankrupt, showEmergency, isMyTurn, isHost, rolling])
 
 // Глобальный таймер игры
 useEffect(() => {
@@ -735,11 +739,8 @@ useEffect(() => {
   }
 
   async function handleRoll() {
-    if (!isMyTurn || rolling || !myPlayer || !gameState) {
-      console.log('[handleRoll] blocked:', { isMyTurn, rolling, hasPlayer: !!myPlayer, hasState: !!gameState })
-      return
-    }
-    if (isRollingRef.current) { console.log('[handleRoll] blocked by isRollingRef'); return }
+    if (!isMyTurn || !myPlayer || !gameState) return
+    if (isRollingRef.current) return // защита от двойного броска пока DB write не завершён
     isRollingRef.current = true
     if ((myPlayer as any).is_eliminated) { isRollingRef.current = false; advanceTurn(gameState); return }
     // Двойной кубик (благотворительность)
@@ -761,8 +762,7 @@ useEffect(() => {
       const roll = roll2 !== null ? roll1 + roll2 : roll1
       setDiceValue(roll1)
       if (roll2 !== null) setDiceValue2(roll2)
-      setRolling(false)
-      isRollingRef.current = false // сбрасываем сразу после анимации, не ждём DB
+      setRolling(false) // визуально кнопка снова доступна
       bc?.send({ type: 'broadcast', event: 'rolled', payload: { player_id: myPlayerId, roll } })
       const { player: movedPlayer, cell, passed_salary, salary_count } = movePlayer(myPlayer, roll, boardCells)
       let updatedPlayer = movedPlayer
@@ -862,6 +862,7 @@ useEffect(() => {
       }
       latestStateRef.current = newState
       await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+      isRollingRef.current = false // DB write завершён — теперь можно снова бросать
 
       const prefs = notifPrefsRef.current
 
