@@ -2958,10 +2958,19 @@ useEffect(() => {
                     <div className="rounded-[14px] p-3" style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)'}}>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-[11px] text-faint">Количество</span>
-                        <span className="text-[13px] font-extrabold text-gold">{marketQty} шт · ₽{marketCost.toLocaleString()}</span>
+                        <span id="market-qty-display" className="text-[13px] font-extrabold text-gold">{marketQty} шт · ₽{marketCost.toLocaleString()}</span>
                       </div>
-                      <input type="range" min={1} max={maxMarketQty} value={marketQty}
-                        onChange={e=>setMarketQty(Number(e.target.value))} className="w-full blue-range"/>
+                      <input type="range" min={1} max={maxMarketQty} defaultValue={marketQty}
+                        onInput={e => {
+                          // Обновляем отображение напрямую без React ре-рендера
+                          const qty = Number((e.target as HTMLInputElement).value)
+                          const cost = qty * (marketData?.newPrice ?? 0)
+                          const el = document.getElementById('market-qty-display')
+                          if (el) el.textContent = `${qty} шт · ₽${cost.toLocaleString('ru-RU')}`
+                        }}
+                        onPointerUp={e => setMarketQty(Number((e.target as HTMLInputElement).value))}
+                        onTouchEnd={e => setMarketQty(Number((e.target as HTMLInputElement).value))}
+                        className="w-full blue-range"/>
                       <div className="flex justify-between mt-1 text-[10px] text-faint">
                         <span>1 шт</span><span>{maxMarketQty} шт (макс · ₽{myPlayer.cash.toLocaleString()} у тебя)</span>
                       </div>
