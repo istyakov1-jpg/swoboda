@@ -557,7 +557,6 @@ useEffect(() => {
     const newState = { ...gameState, players: newPlayers, events: [ev, ...(gameState.events||[])].slice(0,50) }
     latestStateRef.current = newState
     await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
-    showNotif(remaining > 0 ? `⏸ Пропуск хода (осталось ${remaining})` : '▶ Снова в игре!', remaining > 0 ? '#F87171' : '#34D399')
     advanceTurn(newState)
   }, 1500)
   return () => clearTimeout(t)
