@@ -543,6 +543,26 @@ useEffect(() => {
   }
 }, [gameState?.winner_id, gameState?.players?.map((p:any)=>p.passive_income+'/'+p.total_expenses).join(',')])
 
+// Автоматический пропуск хода при skip_turns > 0
+useEffect(() => {
+  if (!isMyTurn || !myPlayer || !gameState || roomStatus !== 'playing') return
+  const skipLeft = (myPlayer as any).skip_turns ?? 0
+  if (skipLeft <= 0) return
+  // Небольшая задержка чтобы игрок увидел что ход пропускается
+  const t = setTimeout(async () => {
+    const remaining = skipLeft - 1
+    const updatedPlayer = { ...myPlayer, skip_turns: remaining }
+    const newPlayers = gameState.players.map((p: any) => p.id === myPlayerId ? updatedPlayer : p)
+    const ev = { id: crypto.randomUUID(), round: gameState.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} пропускает ход${remaining > 0 ? ` (осталось: ${remaining})` : ' — возвращается в игру!'}`, created_at: new Date().toISOString() }
+    const newState = { ...gameState, players: newPlayers, events: [ev, ...(gameState.events||[])].slice(0,50) }
+    latestStateRef.current = newState
+    await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
+    showNotif(remaining > 0 ? `⏸ Пропуск хода (осталось ${remaining})` : '▶ Снова в игре!', remaining > 0 ? '#F87171' : '#34D399')
+    advanceTurn(newState)
+  }, 1500)
+  return () => clearTimeout(t)
+}, [isMyTurn, (myPlayer as any)?.skip_turns])
+
 // Проверка банкротства при каждом ходе
 useEffect(() => {
   if (!myPlayer || !gameState || roomStatus !== 'playing') return
@@ -671,18 +691,8 @@ useEffect(() => {
     // Двойной кубик (благотворительность)
     const doubleDiceRounds = (myPlayer as any).double_dice_rounds ?? 0
 
-    // Пропуск хода из-за сокращения/болезни
-    if ((myPlayer as any).skip_turns > 0) {
-      const remaining = (myPlayer as any).skip_turns - 1
-      const updatedPlayer = { ...myPlayer, skip_turns: remaining }
-      const newPlayers = gameState.players.map((p: Player) => p.id === myPlayerId ? updatedPlayer : p)
-      const ev = { id: crypto.randomUUID(), round: gameState.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} пропускает ход (осталось: ${remaining})`, created_at: new Date().toISOString() }
-      const newState = { ...gameState, players: newPlayers, events: [ev, ...(gameState.events||[])].slice(0,50) }
-      latestStateRef.current = newState
-      await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
-      showNotif(remaining > 0 ? `⏸ Пропуск хода (осталось ${remaining})` : '▶ Снова в игре!', remaining > 0 ? '#F87171' : '#34D399')
-      advanceTurn(newState); return
-    }
+    // skip_turns обрабатывается через useEffect автоматически
+    if ((myPlayer as any).skip_turns > 0) { isRollingRef.current = false; return }
     setRolling(true)
     setHasRolled(true)
     const bc = bcChannelRef.current
