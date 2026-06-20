@@ -341,9 +341,10 @@ export default function GamePage() {
       if ((currentPlayer as any).skip_turns > 0) {
         const remaining = (currentPlayer as any).skip_turns - 1
         const updatedBot = { ...currentPlayer, skip_turns: remaining }
-        const newPlayers = gameState.players.map((p: any) => p.id === currentPlayer.id ? updatedBot : p)
+        const allPlayers = gameState.players.map((p: any) => p.id === currentPlayer.id ? updatedBot : p)
+        const [skipCur, ...skipRest] = allPlayers // ротируем — иначе игра застрянет на боте
         const skipEv = { id: crypto.randomUUID(), round: gameState?.round??1, player_id: currentPlayer.id, player_name: currentPlayer.name, type: 'hit', description: `${currentPlayer.name} пропускает ход (осталось: ${remaining})`, created_at: new Date().toISOString() }
-        const skipState = { ...gameState, players: newPlayers, events: [skipEv, ...(gameState.events||[])].slice(0,50) }
+        const skipState = { ...gameState, players: [...skipRest, skipCur], events: [skipEv, ...(gameState.events||[])].slice(0,50) }
         await db.from('rooms').update({ game_state: skipState }).eq('id', roomId)
         return
       }
