@@ -227,7 +227,17 @@ export default function GamePage() {
     setMyPlayerId(pid)
     if (!localStorage.getItem(`svoboda_intro_${roomId}`)) setShowIntro(true)
 
-    // Сначала подписываемся, и только после SUBSCRIBED делаем fetch — иначе теряем события
+    // Fetch и subscribe параллельно — анти-перезапись защищает от race condition
+    db.from('rooms').select('game_state, status, code, host_id').eq('id', roomId).single()
+      .then(({ data }: {data: any}) => {
+        if (data) {
+          setGameState((gs: any) => gs ?? data.game_state)
+          setRoomStatus(prev => prev === 'playing' ? 'playing' : data.status)
+          setRoomCode(data.code)
+          setIsHost(data.host_id === pid)
+        }
+      })
+
     const channel = supabase.channel(`room-${roomId}`)
     channel
       .on('postgres_changes',
@@ -239,15 +249,14 @@ export default function GamePage() {
         }
       )
       .subscribe((status: string) => {
+        // Если подписка установлена — перечитываем свежий стейт на случай если пропустили событие
         if (status === 'SUBSCRIBED') {
-          // Подписка активна — теперь безопасно читать начальное состояние
-          db.from('rooms').select('game_state, status, code, host_id').eq('id', roomId).single()
+          db.from('rooms').select('game_state, status, host_id').eq('id', roomId).single()
             .then(({ data }: {data: any}) => {
               if (data) {
-                setGameState((gs: any) => gs ?? data.game_state)
-                setRoomStatus(prev => prev === 'playing' ? 'playing' : data.status)
-                setRoomCode(data.code)
-                setIsHost(data.host_id === pid)
+                setGameState(data.game_state)
+                setRoomStatus(data.status)
+                if (data.host_id) setIsHost(data.host_id === pid)
               }
             })
         }
