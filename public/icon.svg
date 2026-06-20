@@ -1,0 +1,38 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512'>
+  <defs>
+    <radialGradient id='bg' cx='50%' cy='35%' r='65%'>
+      <stop offset='0%' stop-color='#1A1510'/>
+      <stop offset='100%' stop-color='#07070D'/>
+    </radialGradient>
+    <radialGradient id='glow' cx='50%' cy='50%' r='50%'>
+      <stop offset='0%' stop-color='#F5B843' stop-opacity='0.15'/>
+      <stop offset='100%' stop-color='#F5B843' stop-opacity='0'/>
+    </radialGradient>
+    <linearGradient id='coin' x1='20%' y1='0%' x2='80%' y2='100%'>
+      <stop offset='0%' stop-color='#FBD888'/>
+      <stop offset='45%' stop-color='#F5B843'/>
+      <stop offset='100%' stop-color='#C07820'/>
+    </linearGradient>
+    <linearGradient id='letter' x1='0%' y1='0%' x2='0%' y2='100%'>
+      <stop offset='0%' stop-color='#07070D'/>
+      <stop offset='100%' stop-color='#1A1206'/>
+    </linearGradient>
+  </defs>
+  <!-- Тёмный фон -->
+  <rect width='512' height='512' rx='112' fill='url(#bg)'/>
+  <!-- Свечение -->
+  <ellipse cx='256' cy='200' rx='200' ry='160' fill='url(#glow)'/>
+  <!-- Внешнее кольцо монеты -->
+  <circle cx='256' cy='256' r='178' fill='none' stroke='url(#coin)' stroke-width='12' opacity='0.4'/>
+  <!-- Монета -->
+  <circle cx='256' cy='256' r='158' fill='url(#coin)'/>
+  <!-- Внутренний круг -->
+  <circle cx='256' cy='256' r='138' fill='none' stroke='#1A1206' stroke-width='8' opacity='0.3'/>
+  <!-- Блик -->
+  <ellipse cx='218' cy='200' rx='52' ry='28' fill='white' opacity='0.12' transform='rotate(-20 218 200)'/>
+  <!-- Буква С -->
+  <text x='256' y='320' font-family='Georgia, serif' font-size='200' font-weight='bold' 
+    text-anchor='middle' fill='url(#letter)' opacity='0.92'>С</text>
+  <!-- Тонкая рамка -->
+  <rect width='512' height='512' rx='112' fill='none' stroke='#F5B843' stroke-width='3' opacity='0.2'/>
+</svg>
