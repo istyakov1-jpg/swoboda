@@ -684,12 +684,7 @@ useEffect(() => {
     db.from('rooms').update({ game_state: { ...gameState, rolling_player_id: myPlayerId } }).eq('id', roomId)
   snd.dice()
     setDiceValue2(null)
-    let count = 0
-    const anim = setInterval(() => {
-      setDiceValue(Math.floor(Math.random()*6)+1)
-      if (doubleDiceRounds > 0) setDiceValue2(Math.floor(Math.random()*6)+1)
-      if(++count>8) clearInterval(anim)
-    }, 80)
+    // Кубик крутится через CSS-анимацию (svDice3D), без JS-интервала
     setTimeout(async () => {
       const roll1 = rollDice()
       const roll2 = doubleDiceRounds > 0 ? rollDice() : null

@@ -143,9 +143,10 @@ export default function BoardView({ myPlayer, gameState, boardView, setBoardView
       <div style={{width:size,height:size,perspective:size*5,filter:'drop-shadow(0 8px 18px rgba(0,0,0,.5))'}}>
         <div style={{
           width:size,height:size,position:'relative',transformStyle:'preserve-3d',
-          transition:'transform .7s cubic-bezier(.18,.7,.22,1)',
+          transition: rolling ? 'none' : 'transform .5s cubic-bezier(.18,.7,.22,1)',
           transform: rolling ? undefined : finals[v],
-          animation: rolling ? 'svDice3D .6s linear infinite' : 'none',
+          animation: rolling ? 'svDice3D .5s linear infinite' : 'none',
+          willChange: 'transform',
         }}>
           {faceValues.map((fv,i)=>(
             <div key={i} style={{
