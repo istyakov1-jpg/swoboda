@@ -1397,8 +1397,9 @@ useEffect(() => {
 
 <div className="px-5 pb-4 pt-2" style={{height:78,flexShrink:0}}>
               {isMyTurn ? (
-                <button onPointerDown={handleRoll} disabled={rolling}
-                  className="flex w-full h-full items-center justify-between rounded-[18px] px-4 disabled:opacity-50"
+                <button onPointerDown={handleRoll}
+                  className="flex w-full h-full items-center justify-between rounded-[18px] px-4"
+                  style={{ opacity: rolling ? 0.5 : 1 }}
                   style={{
                     background: isSkippingTurn
                       ? 'linear-gradient(135deg,rgba(248,113,113,0.25),rgba(220,38,38,0.15))'
