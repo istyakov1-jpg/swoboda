@@ -228,7 +228,7 @@ export default function GamePage() {
     db.from('rooms').select('game_state, status, code, host_id').eq('id', roomId).single()
       .then(({ data }: {data: any}) => {
         if (data) {
-          setGameState(gs => gs ?? data.game_state) // не перезаписываем если realtime уже пришёл
+          setGameState((gs: any) => gs ?? data.game_state) // не перезаписываем если realtime уже пришёл
           setRoomStatus(prev => prev === 'playing' ? 'playing' : data.status) // не откатываем playing → lobby
           setRoomCode(data.code)
           setIsHost(data.host_id === pid)
