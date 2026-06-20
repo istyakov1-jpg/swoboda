@@ -569,14 +569,18 @@ useEffect(() => {
   if (showBankrupt || showEmergency) return
   if (timeLeft <= 0) {
     if (isMyTurn && !rolling) {
+      // Мой ход истёк
       if (!hasRolled) handleRoll()
       else { setShowTurnCard(false); advanceTurn(gameState) }
+    } else if (isHost && !rolling) {
+      // Застрял чужой ход — хост форсирует продолжение
+      advanceTurn(gameState)
     }
     return
   }
   const t = setTimeout(() => setTimeLeft(prev => prev - 1), 1000)
   return () => clearTimeout(t)
-}, [timeLeft, roomStatus, gameState, hasRolled, showBankrupt, showEmergency])
+}, [timeLeft, roomStatus, gameState, hasRolled, showBankrupt, showEmergency, isMyTurn, isHost, rolling])
 
 // Глобальный таймер игры
 useEffect(() => {
