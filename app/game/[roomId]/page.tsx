@@ -194,7 +194,8 @@ export default function GamePage() {
   const bcChannelRef = useRef<any>(null)
   const latestStateRef = useRef<any>(null) // последний сохранённый стейт после броска
   const gameStateRef = useRef<any>(null) // всегда актуальный gameState без добавления в deps
-  const isRollingRef = useRef(false) // синхронная защита от двойного нажатия
+  const isRollingRef = useRef(false) // защита во время 400мс анимации
+  const hasRolledRef = useRef(false) // синхронная копия hasRolled — сбрасывается только при смене хода
   const isAdvancingRef = useRef(false) // защита от двойного advanceTurn
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
   const roomStatusRef = useRef<string>('lobby') // синхронная копия roomStatus для polling
@@ -576,6 +577,8 @@ useEffect(() => {
 useEffect(() => {
   setTimeLeft(TIME_LIMIT)
   setHasRolled(false)
+  hasRolledRef.current = false // сброс синхронного флага
+  isRollingRef.current = false // на случай если предыдущий ход завис
 }, [gameState?.players?.[0]?.id])
 
 // Проверка победителя — следим за всеми игроками
@@ -740,14 +743,15 @@ useEffect(() => {
 
   async function handleRoll() {
     if (!isMyTurn || !myPlayer || !gameState) return
-    if (isRollingRef.current) return // защита от двойного броска пока DB write не завершён
+    if (hasRolledRef.current || isRollingRef.current) return // уже бросили в этом ходу
     isRollingRef.current = true
-    if ((myPlayer as any).is_eliminated) { isRollingRef.current = false; advanceTurn(gameState); return }
+    hasRolledRef.current = true
+    if ((myPlayer as any).is_eliminated) { advanceTurn(gameState); return }
     // Двойной кубик (благотворительность)
     const doubleDiceRounds = (myPlayer as any).double_dice_rounds ?? 0
 
     // skip_turns обрабатывается через useEffect автоматически
-    if ((myPlayer as any).skip_turns > 0) { isRollingRef.current = false; return }
+    if ((myPlayer as any).skip_turns > 0) { hasRolledRef.current = false; isRollingRef.current = false; return }
     setRolling(true)
     setHasRolled(true)
     const bc = bcChannelRef.current
@@ -762,7 +766,8 @@ useEffect(() => {
       const roll = roll2 !== null ? roll1 + roll2 : roll1
       setDiceValue(roll1)
       if (roll2 !== null) setDiceValue2(roll2)
-      setRolling(false) // визуально кнопка снова доступна
+      setRolling(false)
+      isRollingRef.current = false // анимация завершена, ref свободен
       bc?.send({ type: 'broadcast', event: 'rolled', payload: { player_id: myPlayerId, roll } })
       const { player: movedPlayer, cell, passed_salary, salary_count } = movePlayer(myPlayer, roll, boardCells)
       let updatedPlayer = movedPlayer
@@ -862,7 +867,6 @@ useEffect(() => {
       }
       latestStateRef.current = newState
       await db.from('rooms').update({ game_state: newState }).eq('id', roomId)
-      isRollingRef.current = false // DB write завершён — теперь можно снова бросать
 
       const prefs = notifPrefsRef.current
 
