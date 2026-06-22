@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import PullToRefresh from "@/components/PullToRefresh";
 
 export const metadata: Metadata = {
   title: "Свобода — Финансовая игра",
@@ -39,7 +41,12 @@ export default function RootLayout({
         <meta name="apple-touch-fullscreen" content="yes" />
         <meta name="format-detection" content="telephone=no" />
       </head>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        <ErrorBoundary>
+          <PullToRefresh />
+          {children}
+        </ErrorBoundary>
+      </body>
     </html>
   );
 }

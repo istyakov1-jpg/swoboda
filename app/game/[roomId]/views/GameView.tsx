@@ -1371,6 +1371,32 @@ export default function GameView() {
           Сбросить фильтр тикеров
         </button>
       )}
+
+      {/* Перезагрузка — для PWA на iPhone */}
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-faint mb-2">Приложение</div>
+        <div className="rounded-[18px] overflow-hidden" style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <button
+            onClick={() => window.location.reload()}
+            className="flex w-full items-center gap-3 px-4 py-3.5 active:bg-white/5">
+            <span className="text-[18px]">🔄</span>
+            <div className="flex-1 text-left">
+              <div className="text-[13px] font-semibold">Перезагрузить</div>
+              <div className="text-[10px] text-faint mt-0.5">Если что-то зависло — перезагрузи</div>
+            </div>
+          </button>
+          <div style={{height:1,background:'rgba(255,255,255,0.05)'}} />
+          <button
+            onClick={() => { window.location.href = '/lobby' }}
+            className="flex w-full items-center gap-3 px-4 py-3.5 active:bg-white/5">
+            <span className="text-[18px]">🚪</span>
+            <div className="flex-1 text-left">
+              <div className="text-[13px] font-semibold">Выйти в лобби</div>
+              <div className="text-[10px] text-faint mt-0.5">Покинуть текущую игру</div>
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 )}
