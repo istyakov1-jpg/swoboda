@@ -1,7 +1,8 @@
 'use client'
+import { memo } from 'react'
 import { useGameContext } from '../GameContext'
 
-export default function BankruptScreen() {
+const BankruptScreen = memo(function BankruptScreen() {
   const {
     showBankrupt, myPlayer, setShowBankrupt, advanceTurn, latestStateRef, gameState,
   } = useGameContext()
@@ -45,4 +46,5 @@ export default function BankruptScreen() {
       </button>
     </div>
   )
-}
+})
+export default BankruptScreen

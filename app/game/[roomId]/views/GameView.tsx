@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, memo, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { repayDebt, freedomProgress, netPassiveIncome, baseExpenses, getCreditLimit, getTotalDebtPayments } from '@/lib/gameEngine'
 import { STOCKS, CRYPTO, SMALL_DEALS, LARGE_DEALS, getRandomDeal, getRandomDeals, getRandomSellOffer, getRandomEvent, getRandomAuctionAsset, getNewPrice, getPriceChangeEmoji, getStockByTicker, getCryptoByTicker } from '@/lib/gameData'
@@ -32,16 +32,18 @@ const CELL_ICONS: Record<string, JSX.Element> = {
 
 const TIME_LIMIT = 60
 
-function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
-  const tabs = [
-    { id: 'feed',    label: 'Поле',    Icon: IconLayers  },
-    { id: 'balance', label: 'Баланс',  Icon: IconWallet  },
-    { id: 'players', label: 'Игроки',  Icon: IconPeople  },
-    { id: 'journal', label: 'Журнал',  Icon: IconList    },
-  ] as const
+// Вынесен за компонент — не пересоздаётся при каждом рендере
+const TABS = [
+  { id: 'feed'    as const, label: 'Поле',   Icon: IconLayers },
+  { id: 'balance' as const, label: 'Баланс', Icon: IconWallet },
+  { id: 'players' as const, label: 'Игроки', Icon: IconPeople },
+  { id: 'journal' as const, label: 'Журнал', Icon: IconList   },
+] as const
+
+const TabBar = memo(function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
     <div className="flex shrink-0 items-end border-t border-white/[0.08] bg-[#0B0B13] pb-6 pt-2 px-2">
-      {tabs.map(({ id, label, Icon }) => {
+      {TABS.map(({ id, label, Icon }) => {
         const active = tab === id
         return (
           <button key={id} onClick={() => setTab(id)} className="flex flex-1 flex-col items-center gap-1.5 pt-1">
@@ -55,7 +57,7 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
       })}
     </div>
   )
-}
+})
 
 export default function GameView() {
   const ctx = useGameContext()
@@ -92,6 +94,44 @@ export default function GameView() {
   const router = useRouter()
   const [showDDS, setShowDDS] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
+
+  // Мемоизированные derived values — не пересчитываются при несвязанных ре-рендерах
+  const sortedPlayers = useMemo(
+    () => [...(gameState?.players ?? [])].sort((a: Player, b: Player) => freedomProgress(b) - freedomProgress(a)),
+    [gameState?.players]
+  )
+  const playerById = useMemo(
+    () => Object.fromEntries((gameState?.players ?? []).map((p: Player) => [p.id, p])),
+    [gameState?.players]
+  )
+  const incomeAssets = useMemo(() => myPlayer.assets.filter((a: any) => a.passive_income > 0), [myPlayer.assets])
+  const activeDebts = useMemo(() => myPlayer.debts.filter((d: any) => d.amount > 0), [myPlayer.debts])
+  const zeroDebts   = useMemo(() => myPlayer.debts.filter((d: any) => d.amount === 0), [myPlayer.debts])
+  const allJournalEvents = useMemo(() => [...(gameState?.events ?? [])].reverse(), [gameState?.events])
+  const filteredJournal = useMemo(() => {
+    if (journalFilter === 'all')    return allJournalEvents.filter((e: any) => e.type !== 'roll')
+    if (journalFilter === 'mine')   return allJournalEvents.filter((e: any) => e.player_id === myPlayerId && e.type !== 'roll')
+    if (journalFilter === 'money')  return allJournalEvents.filter((e: any) => e.amount)
+    return allJournalEvents.filter((e: any) => EV_CFG[e.type]?.global)
+  }, [allJournalEvents, journalFilter, myPlayerId])
+  const netFlow = useMemo(
+    () => (myPlayer.profession?.salary ?? 0) + myPlayer.passive_income - myPlayer.total_expenses,
+    [myPlayer]
+  )
+  const sellOfferProfit = useMemo(() => {
+    if (!sellOffer) return ''
+    const base = sellOffer.asset.down_payment ?? sellOffer.asset.price
+    return `+₽${(sellOffer.price - base).toLocaleString()} прибыль (${Math.round((sellOffer.price / base - 1) * 100)}%)`
+  }, [sellOffer])
+  const rollBtnStyle = useMemo(() => ({
+    opacity: rolling ? 0.5 : 1 as number,
+    background: isSkippingTurn
+      ? 'linear-gradient(135deg,rgba(248,113,113,0.25),rgba(220,38,38,0.15))'
+      : 'linear-gradient(135deg,#FBD888,#F5B843 55%,#E0891F)',
+    border: isSkippingTurn ? '1.5px solid rgba(248,113,113,0.5)' : 'none',
+    boxShadow: isSkippingTurn ? '0 0 20px -8px rgba(248,113,113,0.5)' : rolling ? 'none' : '0 12px 28px -10px rgba(245,184,67,.55)',
+  }), [rolling, isSkippingTurn])
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#07070D]">
       <div className="relative w-[390px] overflow-hidden rounded-[52px] border border-white/[0.08]" style={{ height:'100vh', maxHeight:'844px', background:'#0B0B13' }}>
@@ -251,14 +291,7 @@ export default function GameView() {
               {isMyTurn ? (
                 <button onPointerDown={handleRoll}
                   className="flex w-full h-full items-center justify-between rounded-[18px] px-4"
-                  style={{
-                    opacity: rolling ? 0.5 : 1,
-                    background: isSkippingTurn
-                      ? 'linear-gradient(135deg,rgba(248,113,113,0.25),rgba(220,38,38,0.15))'
-                      : 'linear-gradient(135deg,#FBD888,#F5B843 55%,#E0891F)',
-                    border: isSkippingTurn ? '1.5px solid rgba(248,113,113,0.5)' : 'none',
-                    boxShadow: isSkippingTurn ? '0 0 20px -8px rgba(248,113,113,0.5)' : rolling ? 'none' : '0 12px 28px -10px rgba(245,184,67,.55)',
-                  }}>
+                  style={rollBtnStyle}>
                   <div className="flex flex-1 items-center gap-2">
                     {/* Кубик(и) */}
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -812,16 +845,15 @@ export default function GameView() {
 
               {/* Лидерборд — сортировка по прогрессу, порядок НЕ меняется во время рендера */}
               {(() => {
-                const sorted = [...gameState.players].sort((a:Player,b:Player)=>freedomProgress(b)-freedomProgress(a))
                 const currentId = gameState.current_player_id
                 return (
                   <div className="mt-4 flex flex-col gap-2">
-                    {sorted.map((p:Player, rank:number)=>{
+                    {sortedPlayers.map((p:Player, rank:number)=>{
                       const prog = freedomProgress(p)
                       const isCurrent = p.id === currentId
                       const isMe = p.id === myPlayerId
                       const isOnline = !p.is_bot && onlinePlayers.has(p.id)
-                      const netFlow = (p.profession?.salary ?? 0) + p.passive_income - p.total_expenses
+                      const pNetFlow = (p.profession?.salary ?? 0) + p.passive_income - p.total_expenses
                       return (
                         <div key={p.id} onClick={()=>setSelectedPlayer(p)}
                           className="rounded-[18px] p-4 cursor-pointer active:opacity-80 transition-opacity"
@@ -856,7 +888,7 @@ export default function GameView() {
                             <div className="text-right shrink-0">
                               <div className="text-[13px] font-extrabold text-gold leading-none">₽{p.cash.toLocaleString()}</div>
                               <div className="text-[10px] mt-0.5" style={{color: netFlow>=0?'#34D399':'#F87171'}}>
-                                {netFlow>=0?'+':''}{netFlow.toLocaleString()}/мес
+                                {pNetFlow>=0?'+':''}{pNetFlow.toLocaleString()}/мес
                               </div>
                             </div>
                           </div>
@@ -881,34 +913,12 @@ export default function GameView() {
 
         {/* JOURNAL */}
         {tab === 'journal' && (()=>{
-          // Конфиг всех типов событий
-          const jCfg: Record<string,{icon:string,label:string,color:string,income?:boolean,expense?:boolean,global?:boolean,hide?:boolean}> = {
-            roll:        { icon:'🎲', label:'Ход',             color:'rgba(255,255,255,0.35)', hide: journalFilter !== 'all' },
-            buy:         { icon:'🏠', label:'Покупка',         color:'#60A5FA', expense:true },
-            sell:        { icon:'💰', label:'Продажа',         color:'#F5B843', income:true },
-            salary:      { icon:'💵', label:'Доход',           color:'#34D399', income:true },
-            hit:         { icon:'💥', label:'Удар',            color:'#F87171', expense:true },
-            event:       { icon:'📰', label:'Событие',         color:'#FBBF24', global:true },
-            credit:      { icon:'🏦', label:'Кредит',          color:'#60A5FA', income:true },
-            repay:       { icon:'✅', label:'Погашение',       color:'#34D399', expense:true },
-            freedom:     { icon:'🚀', label:'Свобода!',        color:'#FBD888', global:true },
-            auction_win: { icon:'🏆', label:'Аукцион',         color:'#A78BFA', expense:true },
-            auction_lose:{ icon:'📢', label:'Торги открыты',   color:'#A78BFA' },
-            child:       { icon:'👶', label:'Ребёнок',         color:'#F5B843', global:true },
-            charity:     { icon:'✨', label:'Благотвор.',      color:'#E8A2C8', expense:true },
-          }
+          // Конфиг вынесен наружу как константа — не пересоздаётся
+          const jCfg = EV_CFG as any
 
-          const allEvents: any[] = [...(gameState?.events??[])].reverse()
-          const filtered = allEvents.filter((ev:any) => {
-            const c = jCfg[ev.type]
-            if(c?.hide) return false
-            if(journalFilter==='mine') return ev.player_id===myPlayerId && ev.type!=='roll'
-            if(journalFilter==='money') return (c?.income||c?.expense) && ev.amount!=null && ev.amount!==0
-            if(journalFilter==='global') return c?.global
-            return ev.type !== 'roll' // в Все — без бросков
-          })
+          const allEvents = allJournalEvents
+          const filtered = filteredJournal
 
-          // Группировка по игроку+раунду для визуального разделения
           const groups: {player_id:string,player_name:string,events:any[]}[] = []
           filtered.forEach((ev:any) => {
             const last = groups[groups.length-1]
@@ -934,10 +944,10 @@ export default function GameView() {
               <div className="grid grid-cols-4 gap-1 rounded-[14px] p-1" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.07)'}}>
                 {([['all','Все'],['mine','Мои'],['money','Деньги'],['global','Важное']] as const).map(([id,label])=>{
                   const on = journalFilter===id
-                  const count = id==='all' ? allEvents.filter(e=>e.type!=='roll').length
-                    : id==='mine' ? allEvents.filter(e=>e.player_id===myPlayerId&&e.type!=='roll').length
-                    : id==='money' ? allEvents.filter(e=>(jCfg[e.type]?.income||jCfg[e.type]?.expense)&&e.amount).length
-                    : allEvents.filter(e=>jCfg[e.type]?.global).length
+                  const count = id==='all' ? allJournalEvents.filter((e:any)=>e.type!=='roll').length
+                    : id==='mine' ? allJournalEvents.filter((e:any)=>e.player_id===myPlayerId&&e.type!=='roll').length
+                    : id==='money' ? allJournalEvents.filter((e:any)=>e.amount).length
+                    : allJournalEvents.filter((e:any)=>EV_CFG[e.type]?.global).length
                   return (
                     <button key={id} onClick={()=>setJournalFilter(id)}
                       style={{padding:'7px 2px',borderRadius:9,border:'none',cursor:'pointer',fontSize:11,fontWeight:800,fontFamily:'Manrope,sans-serif',
@@ -963,7 +973,7 @@ export default function GameView() {
               ) : (
                 <div className="flex flex-col gap-1">
                   {groups.map((group, gi) => {
-                    const player = gameState.players.find((p:Player)=>p.id===group.player_id)
+                    const player = playerById[group.player_id]
                     const isMe = group.player_id===myPlayerId
                     return (
                       <div key={gi} className="mb-2">

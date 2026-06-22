@@ -1,4 +1,5 @@
 'use client'
+import { memo } from 'react'
 import { useGameContext } from '../GameContext'
 import { getCreditLimit, getTotalDebtPayments, takeCredit } from '@/lib/gameEngine'
 import { supabase } from '@/lib/supabase'
@@ -6,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
 
-export default function EmergencyModal() {
+const EmergencyModal = memo(function EmergencyModal() {
   const {
     roomId, showEmergency, myPlayer, gameState, myPlayerId,
     setShowEmergency, advanceTurn, showNotif, showCashNotif, latestStateRef,
@@ -129,4 +130,5 @@ export default function EmergencyModal() {
       </div>
     </div>
   )
-}
+})
+export default EmergencyModal

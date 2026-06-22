@@ -1,9 +1,10 @@
 'use client'
+import { memo, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useGameContext } from '../GameContext'
 import { freedomProgress } from '@/lib/gameEngine'
 
-export default function WinnerScreen() {
+const WinnerScreen = memo(function WinnerScreen() {
   const { winner, gameState, myPlayerId } = useGameContext()
   const router = useRouter()
 
@@ -65,4 +66,5 @@ export default function WinnerScreen() {
       </button>
     </div>
   )
-}
+})
+export default WinnerScreen

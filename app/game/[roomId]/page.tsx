@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { rollDice, movePlayer, collectSalary, buyAsset, freedomProgress, netPassiveIncome, baseExpenses, getCreditLimit, getTotalDebtPayments, calcDividends } from '@/lib/gameEngine'
@@ -68,8 +68,8 @@ export default function GamePage() {
   const notifPrefsRef = useRef(notifPrefs)
   useEffect(() => { notifPrefsRef.current = notifPrefs }, [notifPrefs])
 
-  // Обёртки звука с проверкой настроек
-  const snd = {
+  // Обёртки звука — стабильный объект, читает notifPrefsRef.current при вызове
+  const snd = useMemo(() => ({
     dice:     () => { if(notifPrefsRef.current.sound) sounds.dice() },
     buy:      () => { if(notifPrefsRef.current.sound) sounds.buy() },
     salary:   () => { if(notifPrefsRef.current.sound) sounds.salary() },
@@ -78,7 +78,7 @@ export default function GamePage() {
     bankrupt: () => { if(notifPrefsRef.current.sound) sounds.bankrupt() },
     timeup:   () => { if(notifPrefsRef.current.sound) sounds.timeup() },
     drumroll: () => { if(notifPrefsRef.current.sound) sounds.drumroll() },
-  }
+  }), []) // stable: читает ref при вызове, не нужны deps
   const [balanceTab, setBalanceTab] = useState<'overview'|'assets'|'debts'>('overview')
   const [journalFilter, setJournalFilter] = useState<'all'|'mine'|'money'|'global'>('all')
   const [marketData, setMarketData] = useState<any>(null)
@@ -113,16 +113,25 @@ export default function GamePage() {
   const [gameTimeLeft, setGameTimeLeft] = useState<number|null>(null)
   const [showTimeUp, setShowTimeUp] = useState(false)
 
-  const myPlayer: Player | undefined = gameState?.players?.find((p: Player) => p.id === myPlayerId)
-  const currentPlayer: Player | undefined = gameState?.players?.[0]
+  const myPlayer: Player | undefined = useMemo(
+    () => gameState?.players?.find((p: Player) => p.id === myPlayerId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gameState?.players, myPlayerId]
+  )
+  const currentPlayer: Player | undefined = useMemo(
+    () => gameState?.players?.[0],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gameState?.players]
+  )
   const isMyTurn = currentPlayer?.id === myPlayerId
 
-  // Активный управляющий ботами: хост если онлайн, иначе первый онлайн-игрок
-  const humanPlayerIds = (gameState?.players ?? []).filter((p: any) => !p.is_bot).map((p: any) => p.id)
-  const onlineHumans = humanPlayerIds.filter((id: string) => onlinePlayers.has(id) || id === myPlayerId)
-  const effectiveHost = isHost || (onlineHumans.length > 0 && onlineHumans[0] === myPlayerId)
+  const effectiveHost = useMemo(() => {
+    const humanIds = (gameState?.players ?? []).filter((p: any) => !p.is_bot).map((p: any) => p.id)
+    const onlineH = humanIds.filter((id: string) => onlinePlayers.has(id) || id === myPlayerId)
+    return isHost || (onlineH.length > 0 && onlineH[0] === myPlayerId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState?.players, onlinePlayers, myPlayerId, isHost])
 
-  // Показываем анимацию броска: мой бросок ИЛИ ход бота (не нужен state — вычисляем сразу)
   const showDiceRolling = rolling || anyoneRolling || (!isMyTurn && !!currentPlayer?.is_bot)
 
   const { wgs, showNotif, showCashNotif, handleRoll, handleBuy, handlePass, handleAuctionBuy, advanceTurn } = useGameActions({
@@ -169,22 +178,21 @@ export default function GamePage() {
   })
 
 
-  async function startGame() {
+  const startGame = useCallback(async () => {
     if (startingGame) return
     setStartingGame(true)
-    // Мгновенно сообщаем всем через broadcast
     bcChannelRef.current?.send({ type: 'broadcast', event: 'game_starting', payload: {} })
     const initState = gameState ? { ...gameState, key_rate: KEY_RATE_DEFAULT, game_started_at: new Date().toISOString() } : { key_rate: KEY_RATE_DEFAULT, game_started_at: new Date().toISOString() }
     await db.from('rooms').update({ status: 'playing', game_state: initState }).eq('id', roomId)
     setRoomStatus('playing')
     setStartingGame(false)
-  }
+  }, [startingGame, gameState, roomId])
 
-  function copyCode() {
+  const copyCode = useCallback(() => {
     navigator.clipboard.writeText(roomCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
+  }, [roomCode])
 
   // Shared context builder (boardCells/diffConfig/keyRate are placeholders for lobby)
   function buildCtx(extras: {
@@ -249,54 +257,48 @@ export default function GamePage() {
   if (!myPlayer) return null
 
   const keyRate: number = gameState?.key_rate ?? KEY_RATE_DEFAULT
-  const gameSettings = { ...DEFAULT_SETTINGS, ...(gameState?.settings ?? {}) }
-  const diffConfig = DIFFICULTY_CONFIG[(gameSettings.difficulty ?? 'normal') as GameDifficulty]
-  const boardCells = getBoardCells((gameSettings.difficulty ?? 'normal') as GameDifficulty)
-  const progress = freedomProgress(myPlayer)
-  const total = boardCells.length
-  const pos = myPlayer.position
-  const visibleCells = [-3,-2,-1,0,1,2,3].map(d => ({ cell: boardCells[(pos+d+total)%total], isCurrent: d===0, dist: Math.abs(d) }))
-  const creditLimit = getCreditLimit(myPlayer)
-  const usedDebtMonthly = getTotalDebtPayments(myPlayer)
-  const maxMarketQty = marketData ? Math.max(0, Math.floor(myPlayer.cash / marketData.newPrice)) : 0
-  const marketCost = marketData ? marketData.newPrice * marketQty : 0
+  const gameSettings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(gameState?.settings ?? {}) }), [gameState?.settings])
+  const diffConfig = useMemo(() => DIFFICULTY_CONFIG[(gameSettings.difficulty ?? 'normal') as GameDifficulty], [gameSettings.difficulty])
+  const boardCells = useMemo(() => getBoardCells((gameSettings.difficulty ?? 'normal') as GameDifficulty), [gameSettings.difficulty])
+  const progress = useMemo(() => freedomProgress(myPlayer!), [myPlayer])
+  const visibleCells = useMemo(() => {
+    const total = boardCells.length
+    const pos = myPlayer!.position
+    return [-3,-2,-1,0,1,2,3].map(d => ({ cell: boardCells[(pos+d+total)%total], isCurrent: d===0, dist: Math.abs(d) }))
+  }, [boardCells, myPlayer])
+  const creditLimit = useMemo(() => getCreditLimit(myPlayer!), [myPlayer])
+  const usedDebtMonthly = useMemo(() => getTotalDebtPayments(myPlayer!), [myPlayer])
+  const maxMarketQty = useMemo(() => marketData ? Math.max(0, Math.floor(myPlayer!.cash / marketData.newPrice)) : 0, [marketData, myPlayer])
+  const marketCost = useMemo(() => marketData ? marketData.newPrice * marketQty : 0, [marketData, marketQty])
   const notifAccent = cashNotif ? (cashNotif.positive ? '#34D399' : '#FB6B6B') : '#34D399'
   const skipTurnsLeft = (myPlayer as any)?.skip_turns ?? 0
   const isSkippingTurn = skipTurnsLeft > 0
   const doubleDiceActive = ((myPlayer as any)?.double_dice_rounds ?? 0) > 0
   const doubleDiceLeft = (myPlayer as any)?.double_dice_rounds ?? 0
 
-  // Группировка активов — акции/крипта суммируются по базовому названию
-  const groupedAssets = (() => {
+  const groupedAssets = useMemo(() => {
     const result: any[] = []
     const map: Record<string, any> = {}
-    myPlayer.assets.forEach((a:any) => {
+    myPlayer!.assets.forEach((a:any) => {
       if (a.type === 'stocks' || a.type === 'crypto') {
         const base = a.name.replace(/ x\d+$/, '')
         const qty = parseInt(a.name.match(/x(\d+)$/)?.[1] ?? '1')
-        if (map[base]) {
-          map[base].qty += qty
-          map[base].price += a.price
-        } else {
-          map[base] = { ...a, base, qty, price: a.price }
-          result.push({ _grouped: true, _base: base })
-        }
-      } else {
-        result.push({ ...a, _grouped: false })
-      }
+        if (map[base]) { map[base].qty += qty; map[base].price += a.price }
+        else { map[base] = { ...a, base, qty, price: a.price }; result.push({ _grouped: true, _base: base }) }
+      } else { result.push({ ...a, _grouped: false }) }
     })
     return result.map((g:any) => g._grouped ? { ...map[g._base], name: `${g._base} ×${map[g._base].qty}` } : g)
-  })()
+  }, [myPlayer])
 
-  const marketHoldings = marketData ? myPlayer.assets.filter((a:any)=>a.name?.includes(marketData.name)||a.id?.startsWith(marketData.id)) : []
-  const marketHeldQty = marketHoldings.reduce((s:number,a:any)=>{const m=a.name?.match(/x(\d+)/);return s+(m?parseInt(m[1]):1)},0)
-  const marketHeldValue = marketHoldings.reduce((s:number,a:any)=>s+(a.price||0),0)
-  const marketCurrentHeldValue = marketData ? marketHeldQty * marketData.newPrice : 0
+  const marketHoldings = useMemo(() => marketData ? myPlayer!.assets.filter((a:any)=>a.name?.includes(marketData.name)||a.id?.startsWith(marketData.id)) : [], [marketData, myPlayer])
+  const marketHeldQty = useMemo(() => marketHoldings.reduce((s:number,a:any)=>{const m=a.name?.match(/x(\d+)/);return s+(m?parseInt(m[1]):1)},0), [marketHoldings])
+  const marketHeldValue = useMemo(() => marketHoldings.reduce((s:number,a:any)=>s+(a.price||0),0), [marketHoldings])
+  const marketCurrentHeldValue = useMemo(() => marketData ? marketHeldQty * marketData.newPrice : 0, [marketData, marketHeldQty])
   const marketPnl = marketCurrentHeldValue - marketHeldValue
 
   const selectedDealMonthly = selectedDeal?.debt > 0 ? Math.round(selectedDeal.debt * keyRate / 12) : 0
   const selectedDealNet = selectedDeal ? selectedDeal.passive_income - selectedDealMonthly : 0
-  const selectedDealCanAfford = selectedDeal ? myPlayer.cash >= selectedDeal.down_payment : false
+  const selectedDealCanAfford = selectedDeal ? myPlayer!.cash >= selectedDeal.down_payment : false
 
   const ctxValue = buildCtx({
     boardCells, diffConfig, keyRate,
