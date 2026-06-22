@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import type { Player } from '@/types/database'
 import { rollDice, movePlayer, collectSalary, buyAsset, botDecide, calcDividends } from '@/lib/gameEngine'
 import { STOCKS, CRYPTO, KEY_RATE_DEFAULT, DIFFICULTY_CONFIG, getBoardCells, getRandomDeal, getRandomHit, getRandomAuctionAsset, getNewPrice, getPriceChangeEmoji, getStockByTicker, getCryptoByTicker, type GameDifficulty } from '@/lib/gameData'
+import { gameLog } from '@/lib/gameLogger'
 
 interface UseBotRunnerParams {
   gameState: any
@@ -13,6 +14,8 @@ interface UseBotRunnerParams {
   setAnyoneRolling: (v: boolean) => void
   wgs: (state: any, playerId?: string) => Promise<void>
   advanceTurn: (state: any) => Promise<void>
+  roomId: string
+  turnIdRef: React.MutableRefObject<string>
 }
 
 export function useBotRunner({
@@ -24,6 +27,8 @@ export function useBotRunner({
   setAnyoneRolling,
   wgs,
   advanceTurn,
+  roomId,
+  turnIdRef,
 }: UseBotRunnerParams) {
   useEffect(() => {
     if (!gameState || !currentPlayer?.is_bot) return
@@ -44,6 +49,9 @@ export function useBotRunner({
           const remaining = (botPlayer as any).skip_turns - 1
           if (typeof window !== 'undefined' && (window as any).__dbg)
             (window as any).__dbg(`[BOT_SKIP] ${botPlayer.name} skip ${(botPlayer as any).skip_turns}→${remaining}`)
+          gameLog({ roomId, turnId: turnIdRef.current, eventType: 'SKIP_TURN',
+            playerId: botPlayer.id, playerName: botPlayer.name,
+            payload: { skip_before: (botPlayer as any).skip_turns, skip_after: remaining, is_bot: true } })
           const updatedBot = { ...botPlayer, skip_turns: remaining }
           const allPlayers = gs.players.map((p: any) => p.id === botPlayer.id ? updatedBot : p)
           const [skipCur, ...skipRest] = allPlayers
@@ -57,6 +65,9 @@ export function useBotRunner({
 
         const roll = rollDice()
         setDiceValue(roll)
+        gameLog({ roomId, turnId: turnIdRef.current, eventType: 'BOT_ACTION',
+          playerId: botPlayer.id, playerName: botPlayer.name,
+          payload: { roll, position_before: botPlayer.position, cash: botPlayer.cash } })
         const botDiff = (gs?.settings?.difficulty ?? 'normal') as GameDifficulty
         const botBoard = getBoardCells(botDiff)
         const { player: movedPlayer, cell, passed_salary, salary_count } = movePlayer(botPlayer, roll, botBoard)

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { gameLog } from '@/lib/gameLogger'
 import { supabase } from '@/lib/supabase'
 import { freedomProgress, getCreditLimit } from '@/lib/gameEngine'
 import { sounds, TIME_LIMIT } from '@/lib/gameConstants'
@@ -27,6 +28,7 @@ interface Params {
   gameStateRef: React.MutableRefObject<any>
   hasRolledRef: React.MutableRefObject<boolean>
   isRollingRef: React.MutableRefObject<boolean>
+  isAdvancingRef: React.MutableRefObject<boolean>
   bankruptProcessedRef: React.MutableRefObject<boolean>
   // state from parent
   othersQueue: any[]
@@ -55,6 +57,7 @@ interface Params {
   advanceTurn: (state: any) => Promise<void>
   handleRoll: () => void
   showCashNotif: (label: string, amount: number, positive: boolean, color?: string, type?: string) => void
+  turnIdRef: React.MutableRefObject<string>
 }
 
 export function useGameEffects(p: Params) {
@@ -230,6 +233,9 @@ export function useGameEffects(p: Params) {
       const remaining = ((mp as any).skip_turns ?? 1) - 1
       if (typeof window !== 'undefined' && (window as any).__dbg)
         (window as any).__dbg(`[SKIP] writing wgs skip ${skipLeft}→${remaining} isAdv=${p.isAdvancingRef.current}`)
+      gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'SKIP_TURN',
+        playerId: p.myPlayerId, playerName: mp.name,
+        payload: { skip_before: skipLeft, skip_after: remaining, isAdvancingRef: p.isAdvancingRef.current } })
 
       const updatedPlayer = { ...mp, skip_turns: remaining }
       const allPlayers = gs.players.map((pl: any) => pl.id === p.myPlayerId ? updatedPlayer : pl)
@@ -289,6 +295,9 @@ export function useGameEffects(p: Params) {
         if (mySkipTurns > 0) {
           if (typeof window !== 'undefined' && (window as any).__dbg)
             (window as any).__dbg(`[TIMEOUT] timeLeft=0 skip=${mySkipTurns} forcing advanceTurn! isAdv=${p.isAdvancingRef.current}`)
+          gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'TIMEOUT',
+            playerId: p.myPlayerId, playerName: p.myPlayer?.name,
+            payload: { reason: 'skip_turns>0 but timeLeft=0', skip_turns: mySkipTurns, isAdvancingRef: p.isAdvancingRef.current } })
           p.advanceTurn(p.gameStateRef.current)
         } else if (!p.hasRolled) {
           p.handleRoll()

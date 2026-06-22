@@ -4,6 +4,7 @@ import { rollDice, movePlayer, collectSalary, buyAsset, calcDividends } from '@/
 import { STOCKS, CRYPTO, SMALL_DEALS, LARGE_DEALS, KEY_RATE_DEFAULT, DIFFICULTY_CONFIG, DEFAULT_SETTINGS, getBoardCells, getRandomDeals, getRandomHit, getRandomSellOffer, getRandomEvent, getRandomAuctionAsset, getNewPrice, getPriceChangeEmoji, getStockByTicker, getCryptoByTicker, type GameDifficulty } from '@/lib/gameData'
 import { sounds, TIME_LIMIT } from '@/lib/gameConstants'
 import type { Player } from '@/types/database'
+import { gameLog } from '@/lib/gameLogger'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -55,6 +56,7 @@ interface Params {
   setNotification: (v: any) => void
   cashNotifTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
   snd: any
+  turnIdRef: React.MutableRefObject<string>
 }
 
 export function useGameActions(p: Params) {
@@ -98,6 +100,9 @@ export function useGameActions(p: Params) {
     if (p.isAdvancingRef.current) return
     p.isAdvancingRef.current = true
     dbgScreen(`ADVANCE_START ${state.players[0].name}→${state.players[1]?.name}`)
+    gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ADVANCE_TURN',
+      playerId: state.players[0].id, playerName: state.players[0].name,
+      payload: { from: state.players[0].name, to: state.players[1]?.name, caller: new Error().stack?.split('\n')[2]?.trim()?.slice(0,60) } })
     const expectedPlayerId = state.players[0].id
     try {
       const { error } = await db.rpc('advance_turn_safe', {
@@ -133,6 +138,9 @@ export function useGameActions(p: Params) {
     const doubleDiceRounds = (p.myPlayer as any).double_dice_rounds ?? 0
     if ((p.myPlayer as any).skip_turns > 0) { p.hasRolledRef.current = false; p.isRollingRef.current = false; return }
     dbgScreen('ROLL_START animation')
+    gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ROLL',
+      playerId: p.myPlayerId, playerName: p.myPlayer.name,
+      payload: { position: p.myPlayer.position, cash: p.myPlayer.cash } })
     p.setRolling(true)
     p.setHasRolled(true)
     const bc = p.bcChannelRef.current

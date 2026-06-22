@@ -16,6 +16,7 @@ import { useGameRoom } from './hooks/useGameRoom'
 import { useBotRunner } from './hooks/useBotRunner'
 import { useGameActions } from './hooks/useGameActions'
 import { useGameEffects } from './hooks/useGameEffects'
+import { gameLog } from '@/lib/gameLogger'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -114,6 +115,8 @@ export default function GamePage() {
   const [reconnected, setReconnected] = useState(false)
   const [gameTimeLeft, setGameTimeLeft] = useState<number|null>(null)
   const [showTimeUp, setShowTimeUp] = useState(false)
+  // ID текущего хода — меняется при каждой смене игрока, привязывает все события к ходу
+  const turnIdRef = useRef(crypto.randomUUID())
 
   const myPlayer: Player | undefined = useMemo(
     () => gameState?.players?.find((p: Player) => p.id === myPlayerId),
@@ -136,6 +139,26 @@ export default function GamePage() {
 
   const showDiceRolling = rolling || anyoneRolling || (!isMyTurn && !!currentPlayer?.is_bot)
 
+  // Логирование смены хода
+  useEffect(() => {
+    if (!currentPlayer || roomStatus !== 'playing') return
+    turnIdRef.current = crypto.randomUUID()
+    gameLog({
+      roomId, turnId: turnIdRef.current,
+      eventType: 'TURN_START',
+      playerId: currentPlayer.id,
+      playerName: currentPlayer.name,
+      payload: {
+        skip_turns: (currentPlayer as any).skip_turns ?? 0,
+        is_bot: currentPlayer.is_bot,
+        position: currentPlayer.position,
+        cash: currentPlayer.cash,
+        passive_income: currentPlayer.passive_income,
+      },
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPlayer?.id, roomStatus])
+
   const { wgs, showNotif, showCashNotif, handleRoll, handleBuy, handlePass, handleAuctionBuy, advanceTurn } = useGameActions({
     roomId, myPlayerId, gameState, myPlayer, isMyTurn, hasRolled, currentCell,
     pickedHit, pickedEvent, auctionAsset, selectedDeal,
@@ -144,6 +167,7 @@ export default function GamePage() {
     setSelectedDeal, setDealPool, setShowCredit, setMarketData, setAuctionSubmitted, setMyBid,
     setPickedHit, setPickedEvent, setAuctionAsset, setShowTurnCard, setShowEmergency, setShowBankrupt,
     setSellOffer, setShowAuctionCredit, setCashNotif, setCashColor, setNotification, cashNotifTimerRef, snd,
+    turnIdRef,
   })
 
   useGameRoom({
@@ -162,6 +186,7 @@ export default function GamePage() {
   useBotRunner({
     gameState, currentPlayer, effectiveHostRef, gameStateRef,
     setDiceValue, setAnyoneRolling, wgs, advanceTurn,
+    roomId, turnIdRef,
   })
 
 
@@ -170,13 +195,14 @@ export default function GamePage() {
     roomId, myPlayerId, gameState, myPlayer, isMyTurn, isHost, rolling, hasRolled,
     roomStatus, winner, showBankrupt, showEmergency, timeLeft,
     notifPrefsRef, anyoneRollingTimerRef, latestStateRef, gameStateRef,
-    hasRolledRef, isRollingRef, bankruptProcessedRef,
+    hasRolledRef, isRollingRef, isAdvancingRef, bankruptProcessedRef,
     othersQueue, showTurnCard, marketData,
     setMarketQty, setOthersQueue, setMarketData, setCurrentCell, setQueueMode,
     setShowTurnCard, setBabyEvent, setAnyoneRolling, setWinner,
     setTimeLeft, setHasRolled, setShowEmergency, setShowBankrupt,
     setGameTimeLeft, setShowTimeUp, setOnlinePlayers, setReconnected,
     wgs, advanceTurn, handleRoll, showCashNotif,
+    turnIdRef,
   })
 
 
