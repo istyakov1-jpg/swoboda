@@ -246,29 +246,21 @@ export default function GamePage() {
     }
   }
 
-  if (roomStatus === 'lobby') {
-    return (
-      <GameProvider value={buildCtx({ boardCells: [], diffConfig: {}, keyRate: 0 })}>
-        <LobbyView />
-      </GameProvider>
-    )
-  }
-
-  if (!myPlayer) return null
-
+  // ── Все useMemo ПЕРЕД условными return (Rules of Hooks) ──────────────
   const keyRate: number = gameState?.key_rate ?? KEY_RATE_DEFAULT
   const gameSettings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...(gameState?.settings ?? {}) }), [gameState?.settings])
   const diffConfig = useMemo(() => DIFFICULTY_CONFIG[(gameSettings.difficulty ?? 'normal') as GameDifficulty], [gameSettings.difficulty])
   const boardCells = useMemo(() => getBoardCells((gameSettings.difficulty ?? 'normal') as GameDifficulty), [gameSettings.difficulty])
-  const progress = useMemo(() => freedomProgress(myPlayer!), [myPlayer])
+  const progress = useMemo(() => myPlayer ? freedomProgress(myPlayer) : 0, [myPlayer])
   const visibleCells = useMemo(() => {
+    if (!myPlayer) return []
     const total = boardCells.length
-    const pos = myPlayer!.position
+    const pos = myPlayer.position
     return [-3,-2,-1,0,1,2,3].map(d => ({ cell: boardCells[(pos+d+total)%total], isCurrent: d===0, dist: Math.abs(d) }))
   }, [boardCells, myPlayer])
-  const creditLimit = useMemo(() => getCreditLimit(myPlayer!), [myPlayer])
-  const usedDebtMonthly = useMemo(() => getTotalDebtPayments(myPlayer!), [myPlayer])
-  const maxMarketQty = useMemo(() => marketData ? Math.max(0, Math.floor(myPlayer!.cash / marketData.newPrice)) : 0, [marketData, myPlayer])
+  const creditLimit = useMemo(() => myPlayer ? getCreditLimit(myPlayer) : 0, [myPlayer])
+  const usedDebtMonthly = useMemo(() => myPlayer ? getTotalDebtPayments(myPlayer) : 0, [myPlayer])
+  const maxMarketQty = useMemo(() => (marketData && myPlayer) ? Math.max(0, Math.floor(myPlayer.cash / marketData.newPrice)) : 0, [marketData, myPlayer])
   const marketCost = useMemo(() => marketData ? marketData.newPrice * marketQty : 0, [marketData, marketQty])
   const notifAccent = cashNotif ? (cashNotif.positive ? '#34D399' : '#FB6B6B') : '#34D399'
   const skipTurnsLeft = (myPlayer as any)?.skip_turns ?? 0
@@ -277,9 +269,10 @@ export default function GamePage() {
   const doubleDiceLeft = (myPlayer as any)?.double_dice_rounds ?? 0
 
   const groupedAssets = useMemo(() => {
+    if (!myPlayer) return []
     const result: any[] = []
     const map: Record<string, any> = {}
-    myPlayer!.assets.forEach((a:any) => {
+    myPlayer.assets.forEach((a:any) => {
       if (a.type === 'stocks' || a.type === 'crypto') {
         const base = a.name.replace(/ x\d+$/, '')
         const qty = parseInt(a.name.match(/x(\d+)$/)?.[1] ?? '1')
@@ -290,7 +283,7 @@ export default function GamePage() {
     return result.map((g:any) => g._grouped ? { ...map[g._base], name: `${g._base} ×${map[g._base].qty}` } : g)
   }, [myPlayer])
 
-  const marketHoldings = useMemo(() => marketData ? myPlayer!.assets.filter((a:any)=>a.name?.includes(marketData.name)||a.id?.startsWith(marketData.id)) : [], [marketData, myPlayer])
+  const marketHoldings = useMemo(() => (marketData && myPlayer) ? myPlayer.assets.filter((a:any)=>a.name?.includes(marketData.name)||a.id?.startsWith(marketData.id)) : [], [marketData, myPlayer])
   const marketHeldQty = useMemo(() => marketHoldings.reduce((s:number,a:any)=>{const m=a.name?.match(/x(\d+)/);return s+(m?parseInt(m[1]):1)},0), [marketHoldings])
   const marketHeldValue = useMemo(() => marketHoldings.reduce((s:number,a:any)=>s+(a.price||0),0), [marketHoldings])
   const marketCurrentHeldValue = useMemo(() => marketData ? marketHeldQty * marketData.newPrice : 0, [marketData, marketHeldQty])
@@ -298,7 +291,18 @@ export default function GamePage() {
 
   const selectedDealMonthly = selectedDeal?.debt > 0 ? Math.round(selectedDeal.debt * keyRate / 12) : 0
   const selectedDealNet = selectedDeal ? selectedDeal.passive_income - selectedDealMonthly : 0
-  const selectedDealCanAfford = selectedDeal ? myPlayer!.cash >= selectedDeal.down_payment : false
+  const selectedDealCanAfford = !!(selectedDeal && myPlayer && myPlayer.cash >= selectedDeal.down_payment)
+
+  // ── Условные return ПОСЛЕ всех хуков ──────────────────────────────────
+  if (roomStatus === 'lobby') {
+    return (
+      <GameProvider value={buildCtx({ boardCells: [], diffConfig: {}, keyRate: 0 })}>
+        <LobbyView />
+      </GameProvider>
+    )
+  }
+
+  if (!myPlayer) return null
 
   const ctxValue = buildCtx({
     boardCells, diffConfig, keyRate,
