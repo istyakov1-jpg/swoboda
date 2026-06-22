@@ -47,7 +47,6 @@ export function useBotRunner({
       try {
         if ((botPlayer as any).skip_turns > 0) {
           const remaining = (botPlayer as any).skip_turns - 1
-.skip_turns}→${remaining}`)
           gameLog({ roomId, turnId: turnIdRef.current, eventType: 'SKIP_TURN',
             playerId: botPlayer.id, playerName: botPlayer.name,
             payload: { skip_before: (botPlayer as any).skip_turns, skip_after: remaining, is_bot: true } })
@@ -57,7 +56,7 @@ export function useBotRunner({
           const skipEv = { id: crypto.randomUUID(), round: gs?.round??1, player_id: botPlayer.id, player_name: botPlayer.name, type: 'hit', description: `${botPlayer.name} пропускает ход (осталось: ${remaining})`, created_at: new Date().toISOString() }
           const skipState = { ...gs, players: [...skipRest, skipCur], events: [skipEv, ...(gs.events||[])].slice(0,50) }
           await wgs(skipState, botPlayer.id)
-return
+          return
         }
 
         const roll = rollDice()

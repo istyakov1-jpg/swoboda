@@ -90,6 +90,9 @@ export function useGameActions(p: Params) {
     if (p.cashNotifTimerRef.current) clearTimeout(p.cashNotifTimerRef.current)
     p.cashNotifTimerRef.current = setTimeout(() => { p.setCashNotif(null); p.setCashColor(null) }, 2500)
   }
+
+  }
+
   async function advanceTurn(state: any) {
     if (!state?.players?.[0]) return
     if (p.isAdvancingRef.current) return

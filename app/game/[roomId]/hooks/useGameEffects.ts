@@ -179,7 +179,7 @@ export function useGameEffects(p: Params) {
 
   // Сброс таймера и флага при смене хода
   useEffect(() => {
-p.setTimeLeft(TIME_LIMIT)
+    p.setTimeLeft(TIME_LIMIT)
     p.setHasRolled(false)
     p.hasRolledRef.current = false
     p.isRollingRef.current = false
@@ -207,20 +207,21 @@ p.setTimeLeft(TIME_LIMIT)
     const skipLeft = (p.myPlayer as any)?.skip_turns ?? 0
     const ts = () => new Date().toISOString().slice(11,23)
     // Логируем КАЖДЫЙ запуск эффекта
-}`)
 
     if (!p.isMyTurn || !p.myPlayer || !p.gameState || p.roomStatus !== 'playing') return
     if (skipLeft <= 0) return
-const t = setTimeout(async () => {
+
+
+    const t = setTimeout(async () => {
       const gs = p.gameStateRef.current ?? p.gameState
       const mp = gs.players.find((pl: any) => pl.id === p.myPlayerId)
-} myId=${p.myPlayerId?.slice(0,6)} match=${gs.players[0]?.id === p.myPlayerId} skip=${(mp as any)?.skip_turns}`)
+
 
       if (!mp || gs.players[0]?.id !== p.myPlayerId) {
-return
+        return
       }
       const remaining = ((mp as any).skip_turns ?? 1) - 1
-gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'SKIP_TURN',
+      gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'SKIP_TURN',
         playerId: p.myPlayerId, playerName: mp.name,
         payload: { skip_before: skipLeft, skip_after: remaining, isAdvancingRef: p.isAdvancingRef.current } })
 
@@ -231,9 +232,10 @@ gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'SKIP_TURN',
       const newState = { ...gs, players: [...skipRest, skipCur], events: [ev, ...(gs.events||[])].slice(0,50) }
       p.latestStateRef.current = newState
       await p.wgs(newState)
-}, 1500)
+
+    }, 1500)
     return () => {
-clearTimeout(t)
+      clearTimeout(t)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.isMyTurn, (p.myPlayer as any)?.skip_turns, p.gameState?.players?.[0]?.id])
@@ -275,7 +277,7 @@ clearTimeout(t)
       if (p.isMyTurn && !p.rolling) {
         const mySkipTurns = (p.myPlayer as any)?.skip_turns ?? 0
         if (mySkipTurns > 0) {
-gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'TIMEOUT',
+          gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'TIMEOUT',
             playerId: p.myPlayerId, playerName: p.myPlayer?.name,
             payload: { reason: 'skip_turns>0 but timeLeft=0', skip_turns: mySkipTurns, isAdvancingRef: p.isAdvancingRef.current } })
           p.advanceTurn(p.gameStateRef.current)
