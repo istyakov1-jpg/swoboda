@@ -1,6 +1,6 @@
 'use client'
 import { memo, useMemo } from 'react'
-import { useRenderCount } from '@/lib/profiling'
+
 import { useRouter } from 'next/navigation'
 import { useGameContext } from '../GameContext'
 import { freedomProgress } from '@/lib/gameEngine'
@@ -8,7 +8,7 @@ import { freedomProgress } from '@/lib/gameEngine'
 const WinnerScreen = memo(function WinnerScreen() {
   const { winner, gameState, myPlayerId } = useGameContext()
   const router = useRouter()
-  useRenderCount('WinnerScreen', { winner: winner?.id })
+
 
   if (!winner) return null
 

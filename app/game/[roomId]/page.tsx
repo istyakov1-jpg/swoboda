@@ -8,13 +8,14 @@ import { SMALL_DEALS, LARGE_DEALS, STOCKS, CRYPTO, KEY_RATE_DEFAULT, DIFFICULTY_
 import type { Player } from '@/types/database'
 import { sounds, TIME_LIMIT } from '@/lib/gameConstants'
 import { GameProvider } from './GameContext'
+import { GameTimerProvider } from './GameTimerContext'
+import { GameDiceProvider } from './GameDiceContext'
 import LobbyView from './views/LobbyView'
 import GameView from './views/GameView'
 import { useGameRoom } from './hooks/useGameRoom'
 import { useBotRunner } from './hooks/useBotRunner'
 import { useGameActions } from './hooks/useGameActions'
 import { useGameEffects } from './hooks/useGameEffects'
-import { useRenderCount, useStateChangeTracker } from '@/lib/profiling'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -135,20 +136,6 @@ export default function GamePage() {
 
   const showDiceRolling = rolling || anyoneRolling || (!isMyTurn && !!currentPlayer?.is_bot)
 
-  // ── PROFILING (временно) ─────────────────────────────────
-  useRenderCount('GamePage', {
-    gameState: gameState?.players?.[0]?.id,
-    roomStatus, rolling, hasRolled, timeLeft, anyoneRolling,
-    diceValue, showTurnCard, showBankrupt, showEmergency, winner: !!winner,
-    marketData: marketData?.ticker, cashNotif: cashNotif?.label,
-  })
-  useStateChangeTracker('GamePage-state', {
-    roomStatus, rolling, hasRolled, timeLeft, anyoneRolling, diceValue,
-    showTurnCard, showBankrupt, showEmergency, notification: notification?.msg,
-    cashNotif: cashNotif?.label, marketQty, tab, balanceTab, journalFilter,
-    gameStateRound: gameState?.round, currentPlayerId: currentPlayer?.id,
-  })
-  // ── END PROFILING ────────────────────────────────────────
 
   const { wgs, showNotif, showCashNotif, handleRoll, handleBuy, handlePass, handleAuctionBuy, advanceTurn } = useGameActions({
     roomId, myPlayerId, gameState, myPlayer, isMyTurn, hasRolled, currentCell,
@@ -225,8 +212,10 @@ export default function GamePage() {
     return {
       roomId,
       gameState, myPlayerId, myPlayer, roomStatus, roomCode, isHost,
-      currentPlayer, isMyTurn, timeLeft, rolling, hasRolled,
-      diceValue, diceValue2, anyoneRolling, showTurnCard, currentCell,
+      currentPlayer, isMyTurn, hasRolled,
+      // timeLeft, diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling
+      // вынесены в GameTimerContext / GameDiceContext — не вызывают ре-рендер всего дерева
+      showTurnCard, currentCell,
       queueMode, pickedHit, pickedEvent, auctionAsset, selectedDeal, dealPool,
       showBankrupt, showEmergency, winner, onlinePlayers, cashNotif, cashColor,
       notification, showCredit, marketData, marketQty,
@@ -253,7 +242,7 @@ export default function GamePage() {
       progress: 0, visibleCells: [], creditLimit: 0, usedDebtMonthly: 0,
       maxMarketQty: 0, marketCost: 0, notifAccent: '#34D399',
       skipTurnsLeft: 0, isSkippingTurn: false, doubleDiceActive: false, doubleDiceLeft: 0,
-      showDiceRolling: false, groupedAssets: [],
+      groupedAssets: [],
       marketHoldings: [], marketHeldQty: 0, marketHeldValue: 0,
       marketCurrentHeldValue: 0, marketPnl: 0,
       selectedDealMonthly: 0, selectedDealNet: 0, selectedDealCanAfford: false,
@@ -325,16 +314,27 @@ export default function GamePage() {
     progress, visibleCells, creditLimit, usedDebtMonthly,
     maxMarketQty, marketCost, notifAccent,
     skipTurnsLeft, isSkippingTurn, doubleDiceActive, doubleDiceLeft,
-    showDiceRolling, groupedAssets,
+    groupedAssets,
     marketHoldings, marketHeldQty, marketHeldValue,
     marketCurrentHeldValue, marketPnl,
     selectedDealMonthly, selectedDealNet, selectedDealCanAfford,
     gameSettings,
   })
 
+  // timerCtx и diceCtx обновляются часто, но не вызывают ре-рендер
+  // компонентов потребляющих только основной GameContext
+  const timerCtxValue = useMemo(() => ({ timeLeft }), [timeLeft])
+  const diceCtxValue = useMemo(() => ({
+    diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling
+  }), [diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling])
+
   return (
   <GameProvider value={ctxValue}>
-    <GameView />
+    <GameTimerProvider value={timerCtxValue}>
+      <GameDiceProvider value={diceCtxValue}>
+        <GameView />
+      </GameDiceProvider>
+    </GameTimerProvider>
   </GameProvider>
   )
 }

@@ -13,12 +13,9 @@ export interface GameCtx {
   isHost: boolean
   currentPlayer: any
   isMyTurn: boolean
-  timeLeft: number
-  rolling: boolean
   hasRolled: boolean
-  diceValue: number | null
-  diceValue2: number | null
-  anyoneRolling: boolean
+  // timeLeft → useGameTimer()
+  // rolling, diceValue, diceValue2, anyoneRolling, showDiceRolling → useGameDice()
   showTurnCard: boolean
   currentCell: any
   queueMode: boolean
@@ -90,7 +87,6 @@ export interface GameCtx {
   isSkippingTurn: boolean
   doubleDiceActive: boolean
   doubleDiceLeft: number
-  showDiceRolling: boolean
   groupedAssets: any[]
   marketHoldings: any[]
   marketHeldQty: number

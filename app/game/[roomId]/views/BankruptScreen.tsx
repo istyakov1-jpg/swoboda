@@ -1,13 +1,13 @@
 'use client'
 import { memo } from 'react'
-import { useRenderCount } from '@/lib/profiling'
+
 import { useGameContext } from '../GameContext'
 
 const BankruptScreen = memo(function BankruptScreen() {
   const {
     showBankrupt, myPlayer, setShowBankrupt, advanceTurn, latestStateRef, gameState,
   } = useGameContext()
-  useRenderCount('BankruptScreen', { showBankrupt, cash: myPlayer?.cash })
+
 
   if (!showBankrupt && !(myPlayer as any)?.is_eliminated) return null
 

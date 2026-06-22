@@ -1,6 +1,5 @@
 'use client'
-import { useState, memo, useMemo, useCallback, useEffect } from 'react'
-import { useRenderCount, useStateChangeTracker, markTurnStart, flushReport } from '@/lib/profiling'
+import { useState, memo, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { repayDebt, freedomProgress, netPassiveIncome, baseExpenses, getCreditLimit, getTotalDebtPayments } from '@/lib/gameEngine'
 import { STOCKS, CRYPTO, SMALL_DEALS, LARGE_DEALS, getRandomDeal, getRandomDeals, getRandomSellOffer, getRandomEvent, getRandomAuctionAsset, getNewPrice, getPriceChangeEmoji, getStockByTicker, getCryptoByTicker } from '@/lib/gameData'
@@ -10,6 +9,8 @@ import { Dice3D } from '../Dice3D'
 import { CELL_CONFIG, EV_CFG, sounds } from '@/lib/gameConstants'
 import { supabase } from '@/lib/supabase'
 import { useGameContext } from '../GameContext'
+import { useGameTimer } from '../GameTimerContext'
+import { useGameDice } from '../GameDiceContext'
 import EmergencyModal from './EmergencyModal'
 import WinnerScreen from './WinnerScreen'
 import BankruptScreen from './BankruptScreen'
@@ -68,11 +69,10 @@ export default function GameView() {
     selectedDeal, showCredit, marketData, marketQty,
     showOpenAuctionModal, onlinePlayers, cashNotif, cashColor, notification,
     winner, showBankrupt, showEmergency, reconnected,
-    diceValue, diceValue2, rolling, timeLeft, anyoneRolling,
     boardCells, diffConfig, keyRate, gameSettings, gameTimeLeft, showTimeUp,
     progress, visibleCells, creditLimit, usedDebtMonthly,
     maxMarketQty, marketCost, notifAccent,
-    skipTurnsLeft, isSkippingTurn, doubleDiceActive, doubleDiceLeft, showDiceRolling,
+    skipTurnsLeft, isSkippingTurn, doubleDiceActive, doubleDiceLeft,
     groupedAssets, marketHoldings, marketHeldQty, marketHeldValue,
     marketCurrentHeldValue, marketPnl,
     selectedDealMonthly, selectedDealNet, selectedDealCanAfford,
@@ -92,25 +92,13 @@ export default function GameView() {
     showIntro, setShowIntro, myBid, auctionSubmitted, copied,
   } = ctx
 
+  // Отдельные контексты: не ре-рендерят GameView при их изменении
+  const { timeLeft } = useGameTimer()
+  const { diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling } = useGameDice()
+
   const router = useRouter()
   const [showDDS, setShowDDS] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
-
-  // ── PROFILING (временно) ─────────────────────────────────
-  useRenderCount('GameView', {
-    gameState: gameState?.players?.[0]?.id + '/' + gameState?.round,
-    tab, rolling, timeLeft, showTurnCard, anyoneRolling,
-    diceValue, notification: notification?.msg, cashNotif: cashNotif?.label,
-    isMyTurn, hasRolled, winner: !!winner,
-  })
-  useStateChangeTracker('GameView-state', {
-    tab, rolling, timeLeft, showTurnCard, anyoneRolling, diceValue,
-    isMyTurn, hasRolled, currentPlayer: currentPlayer?.id,
-  })
-  // Метка начала хода при смене текущего игрока
-  useEffect(() => { markTurnStart() }, [currentPlayer?.id])
-  // ── END PROFILING ────────────────────────────────────────
-
   // Мемоизированные derived values — не пересчитываются при несвязанных ре-рендерах
   const sortedPlayers = useMemo(
     () => [...(gameState?.players ?? [])].sort((a: Player, b: Player) => freedomProgress(b) - freedomProgress(a)),
