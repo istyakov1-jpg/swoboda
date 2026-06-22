@@ -179,9 +179,7 @@ export function useGameEffects(p: Params) {
 
   // Сброс таймера и флага при смене хода
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).__dbg)
-      (window as any).__dbg(`TURN_EFFECT→${p.gameState?.players?.[0]?.name} hasR=${p.hasRolledRef.current} isR=${p.isRollingRef.current} isAdv=${p.isAdvancingRef.current}`)
-    p.setTimeLeft(TIME_LIMIT)
+p.setTimeLeft(TIME_LIMIT)
     p.setHasRolled(false)
     p.hasRolledRef.current = false
     p.isRollingRef.current = false
@@ -209,31 +207,20 @@ export function useGameEffects(p: Params) {
     const skipLeft = (p.myPlayer as any)?.skip_turns ?? 0
     const ts = () => new Date().toISOString().slice(11,23)
     // Логируем КАЖДЫЙ запуск эффекта
-    if (typeof window !== 'undefined' && (window as any).__dbg)
-      (window as any).__dbg(`[SKIP_EFFECT] myTurn=${p.isMyTurn} skip=${skipLeft} p0=${p.gameState?.players?.[0]?.name?.slice(0,6)}`)
+}`)
 
     if (!p.isMyTurn || !p.myPlayer || !p.gameState || p.roomStatus !== 'playing') return
     if (skipLeft <= 0) return
-
-    if (typeof window !== 'undefined' && (window as any).__dbg)
-      (window as any).__dbg(`[SKIP] starting 1500ms timer skip=${skipLeft}`)
-
-    const t = setTimeout(async () => {
+const t = setTimeout(async () => {
       const gs = p.gameStateRef.current ?? p.gameState
       const mp = gs.players.find((pl: any) => pl.id === p.myPlayerId)
-
-      if (typeof window !== 'undefined' && (window as any).__dbg)
-        (window as any).__dbg(`[SKIP_FIRE] p0=${gs.players[0]?.name?.slice(0,6)} myId=${p.myPlayerId?.slice(0,6)} match=${gs.players[0]?.id === p.myPlayerId} skip=${(mp as any)?.skip_turns}`)
+} myId=${p.myPlayerId?.slice(0,6)} match=${gs.players[0]?.id === p.myPlayerId} skip=${(mp as any)?.skip_turns}`)
 
       if (!mp || gs.players[0]?.id !== p.myPlayerId) {
-        if (typeof window !== 'undefined' && (window as any).__dbg)
-          (window as any).__dbg(`[SKIP_ABORT] turn already passed`)
-        return
+return
       }
       const remaining = ((mp as any).skip_turns ?? 1) - 1
-      if (typeof window !== 'undefined' && (window as any).__dbg)
-        (window as any).__dbg(`[SKIP] writing wgs skip ${skipLeft}→${remaining} isAdv=${p.isAdvancingRef.current}`)
-      gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'SKIP_TURN',
+gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'SKIP_TURN',
         playerId: p.myPlayerId, playerName: mp.name,
         payload: { skip_before: skipLeft, skip_after: remaining, isAdvancingRef: p.isAdvancingRef.current } })
 
@@ -244,14 +231,9 @@ export function useGameEffects(p: Params) {
       const newState = { ...gs, players: [...skipRest, skipCur], events: [ev, ...(gs.events||[])].slice(0,50) }
       p.latestStateRef.current = newState
       await p.wgs(newState)
-
-      if (typeof window !== 'undefined' && (window as any).__dbg)
-        (window as any).__dbg(`[SKIP_DONE] wgs completed remaining=${remaining}`)
-    }, 1500)
+}, 1500)
     return () => {
-      if (typeof window !== 'undefined' && (window as any).__dbg)
-        (window as any).__dbg(`[SKIP_CLEANUP] timer cancelled`)
-      clearTimeout(t)
+clearTimeout(t)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.isMyTurn, (p.myPlayer as any)?.skip_turns, p.gameState?.players?.[0]?.id])
@@ -293,9 +275,7 @@ export function useGameEffects(p: Params) {
       if (p.isMyTurn && !p.rolling) {
         const mySkipTurns = (p.myPlayer as any)?.skip_turns ?? 0
         if (mySkipTurns > 0) {
-          if (typeof window !== 'undefined' && (window as any).__dbg)
-            (window as any).__dbg(`[TIMEOUT] timeLeft=0 skip=${mySkipTurns} forcing advanceTurn! isAdv=${p.isAdvancingRef.current}`)
-          gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'TIMEOUT',
+gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'TIMEOUT',
             playerId: p.myPlayerId, playerName: p.myPlayer?.name,
             payload: { reason: 'skip_turns>0 but timeLeft=0', skip_turns: mySkipTurns, isAdvancingRef: p.isAdvancingRef.current } })
           p.advanceTurn(p.gameStateRef.current)

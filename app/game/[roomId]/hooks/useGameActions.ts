@@ -90,16 +90,10 @@ export function useGameActions(p: Params) {
     if (p.cashNotifTimerRef.current) clearTimeout(p.cashNotifTimerRef.current)
     p.cashNotifTimerRef.current = setTimeout(() => { p.setCashNotif(null); p.setCashColor(null) }, 2500)
   }
-
-  function dbgScreen(msg: string) {
-    if (typeof window !== 'undefined' && (window as any).__dbg) (window as any).__dbg(msg)
-  }
-
   async function advanceTurn(state: any) {
     if (!state?.players?.[0]) return
     if (p.isAdvancingRef.current) return
     p.isAdvancingRef.current = true
-    dbgScreen(`ADVANCE_START ${state.players[0].name}→${state.players[1]?.name}`)
     gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ADVANCE_TURN',
       playerId: state.players[0].id, playerName: state.players[0].name,
       payload: { from: state.players[0].name, to: state.players[1]?.name, caller: new Error().stack?.split('\n')[2]?.trim()?.slice(0,60) } })
@@ -117,19 +111,15 @@ export function useGameActions(p: Params) {
       }
     } finally {
       p.isAdvancingRef.current = false
-      dbgScreen('ADVANCE_END isAdvancingRef→false')
     }
   }
 
   async function handleRoll() {
-    dbgScreen(`handleRoll: myTurn=${p.isMyTurn} hasR=${p.hasRolledRef.current} isRoll=${p.isRollingRef.current} isAdv=${p.isAdvancingRef.current}`)
 
     if (!p.isMyTurn || !p.myPlayer || !p.gameState) {
-      dbgScreen(`BLOCKED: myTurn=${p.isMyTurn} myPlayer=${!!p.myPlayer} gs=${!!p.gameState}`)
       return
     }
     if (p.hasRolledRef.current || p.isRollingRef.current) {
-      dbgScreen(`BLOCKED refs: hasRolledRef=${p.hasRolledRef.current} isRollingRef=${p.isRollingRef.current}`)
       return
     }
     p.isRollingRef.current = true
@@ -137,7 +127,6 @@ export function useGameActions(p: Params) {
     if ((p.myPlayer as any).is_eliminated) { p.isRollingRef.current = false; p.hasRolledRef.current = false; advanceTurn(p.gameState); return }
     const doubleDiceRounds = (p.myPlayer as any).double_dice_rounds ?? 0
     if ((p.myPlayer as any).skip_turns > 0) { p.hasRolledRef.current = false; p.isRollingRef.current = false; return }
-    dbgScreen('ROLL_START animation')
     gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ROLL',
       playerId: p.myPlayerId, playerName: p.myPlayer.name,
       payload: { position: p.myPlayer.position, cash: p.myPlayer.cash } })
@@ -156,7 +145,6 @@ export function useGameActions(p: Params) {
       if (roll2 !== null) p.setDiceValue2(roll2)
       p.setRolling(false)
       p.isRollingRef.current = false
-      dbgScreen(`ROLL_END roll=${roll} isRollingRef→false`)
       bc?.send({ type: 'broadcast', event: 'rolled', payload: { player_id: p.myPlayerId, roll } })
       const { player: movedPlayer, cell, passed_salary, salary_count } = movePlayer(p.myPlayer, roll, getBoardCellsFn())
       let updatedPlayer = movedPlayer
