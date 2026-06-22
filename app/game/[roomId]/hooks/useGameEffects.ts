@@ -203,15 +203,34 @@ export function useGameEffects(p: Params) {
 
   // Автоматический пропуск хода при skip_turns > 0
   useEffect(() => {
+    const skipLeft = (p.myPlayer as any)?.skip_turns ?? 0
+    const ts = () => new Date().toISOString().slice(11,23)
+    // Логируем КАЖДЫЙ запуск эффекта
+    if (typeof window !== 'undefined' && (window as any).__dbg)
+      (window as any).__dbg(`[SKIP_EFFECT] myTurn=${p.isMyTurn} skip=${skipLeft} p0=${p.gameState?.players?.[0]?.name?.slice(0,6)}`)
+
     if (!p.isMyTurn || !p.myPlayer || !p.gameState || p.roomStatus !== 'playing') return
-    const skipLeft = (p.myPlayer as any).skip_turns ?? 0
     if (skipLeft <= 0) return
+
+    if (typeof window !== 'undefined' && (window as any).__dbg)
+      (window as any).__dbg(`[SKIP] starting 1500ms timer skip=${skipLeft}`)
+
     const t = setTimeout(async () => {
-      // Читаем свежий стейт — 1500мс могло прийти realtime обновление
       const gs = p.gameStateRef.current ?? p.gameState
       const mp = gs.players.find((pl: any) => pl.id === p.myPlayerId)
-      if (!mp || gs.players[0]?.id !== p.myPlayerId) return // ход уже передан
+
+      if (typeof window !== 'undefined' && (window as any).__dbg)
+        (window as any).__dbg(`[SKIP_FIRE] p0=${gs.players[0]?.name?.slice(0,6)} myId=${p.myPlayerId?.slice(0,6)} match=${gs.players[0]?.id === p.myPlayerId} skip=${(mp as any)?.skip_turns}`)
+
+      if (!mp || gs.players[0]?.id !== p.myPlayerId) {
+        if (typeof window !== 'undefined' && (window as any).__dbg)
+          (window as any).__dbg(`[SKIP_ABORT] turn already passed`)
+        return
+      }
       const remaining = ((mp as any).skip_turns ?? 1) - 1
+      if (typeof window !== 'undefined' && (window as any).__dbg)
+        (window as any).__dbg(`[SKIP] writing wgs skip ${skipLeft}→${remaining} isAdv=${p.isAdvancingRef.current}`)
+
       const updatedPlayer = { ...mp, skip_turns: remaining }
       const allPlayers = gs.players.map((pl: any) => pl.id === p.myPlayerId ? updatedPlayer : pl)
       const [skipCur, ...skipRest] = allPlayers
@@ -219,9 +238,15 @@ export function useGameEffects(p: Params) {
       const newState = { ...gs, players: [...skipRest, skipCur], events: [ev, ...(gs.events||[])].slice(0,50) }
       p.latestStateRef.current = newState
       await p.wgs(newState)
+
+      if (typeof window !== 'undefined' && (window as any).__dbg)
+        (window as any).__dbg(`[SKIP_DONE] wgs completed remaining=${remaining}`)
     }, 1500)
-    return () => clearTimeout(t)
-  // gameState?.players?.[0]?.id добавлен чтобы эффект перезапускался при реконнекте
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).__dbg)
+        (window as any).__dbg(`[SKIP_CLEANUP] timer cancelled`)
+      clearTimeout(t)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.isMyTurn, (p.myPlayer as any)?.skip_turns, p.gameState?.players?.[0]?.id])
 
@@ -262,8 +287,8 @@ export function useGameEffects(p: Params) {
       if (p.isMyTurn && !p.rolling) {
         const mySkipTurns = (p.myPlayer as any)?.skip_turns ?? 0
         if (mySkipTurns > 0) {
-          // skip_turns эффект обрабатывает это автоматически за 1.5 сек
-          // Если мы здесь — значит прошло >60с и эффект не сработал, форсируем
+          if (typeof window !== 'undefined' && (window as any).__dbg)
+            (window as any).__dbg(`[TIMEOUT] timeLeft=0 skip=${mySkipTurns} forcing advanceTurn! isAdv=${p.isAdvancingRef.current}`)
           p.advanceTurn(p.gameStateRef.current)
         } else if (!p.hasRolled) {
           p.handleRoll()
