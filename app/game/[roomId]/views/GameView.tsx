@@ -294,7 +294,14 @@ export default function GameView() {
 
 <div className="px-5 pb-4 pt-2" style={{height:78,flexShrink:0}}>
               {isMyTurn ? (
-                <button onPointerDown={handleRoll}
+                <button onPointerDown={(e) => {
+                  console.log('%c[ROLL_CLICK UI]', 'color:#34D399;font-weight:bold', new Date().toISOString().slice(11,23), {
+                    rolling, anyoneRolling, showDiceRolling,
+                    hasRolled, isMyTurn,
+                    timeLeft,
+                  })
+                  handleRoll()
+                }}
                   className="flex w-full h-full items-center justify-between rounded-[18px] px-4"
                   style={rollBtnStyle}>
                   <div className="flex flex-1 items-center gap-2">

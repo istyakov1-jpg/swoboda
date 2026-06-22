@@ -67,6 +67,18 @@ export function useGameRoom({
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
         (payload: any) => {
+          const prev = payload.old?.game_state
+          const next = payload.new.game_state
+          const prevPlayer = prev?.players?.[0]?.id
+          const nextPlayer = next?.players?.[0]?.id
+          console.log('%c[REALTIME_UPDATE]', 'color:#60A5FA', new Date().toISOString().slice(11,23), {
+            rolling_player_id: next?.rolling_player_id?.slice(0,8) ?? null,
+            currentPlayer: nextPlayer?.slice(0,8),
+          })
+          if (prevPlayer && nextPlayer && prevPlayer !== nextPlayer) {
+            console.log('%c[TURN_CHANGED]', 'color:#F5B843;font-weight:bold',
+              prev?.players?.[0]?.name, '→', next?.players?.[0]?.name)
+          }
           setGameState(payload.new.game_state)
           setRoomStatus(payload.new.status)
           if (payload.new.host_id) setIsHost(payload.new.host_id === pid)

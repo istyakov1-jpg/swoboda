@@ -89,12 +89,27 @@ export function useGameActions(p: Params) {
     p.cashNotifTimerRef.current = setTimeout(() => { p.setCashNotif(null); p.setCashColor(null) }, 2500)
   }
 
+  function rollDebugState(tag: string) {
+    const gs = p.gameState
+    console.log(`%c[${tag}] ${new Date().toISOString().slice(11,23)}`, 'color:#F5B843;font-weight:bold', {
+      player_id:        p.myPlayerId?.slice(0,8),
+      current_player:   gs?.players?.[0]?.id?.slice(0,8),
+      isMyTurn:         p.isMyTurn,
+      hasRolled:        p.hasRolled,
+      hasRolledRef:     p.hasRolledRef.current,
+      rolling:          'see DiceCtx',
+      isRollingRef:     p.isRollingRef.current,
+      isAdvancingRef:   p.isAdvancingRef.current,
+      rolling_player_id: gs?.rolling_player_id?.slice(0,8) ?? null,
+      roomStatus:       p.gameState ? 'playing' : '?',
+    })
+  }
+
   async function advanceTurn(state: any) {
     if (!state?.players?.[0]) return
     if (p.isAdvancingRef.current) return
     p.isAdvancingRef.current = true
-    // setTimeLeft убран — таймер сбрасывается только через turn-change effect
-    // когда Supabase realtime подтвердит смену players[0].id
+    console.log('%c[ADVANCE_START]', 'color:#A78BFA;font-weight:bold', state.players[0].name, '→', state.players[1]?.name)
     const expectedPlayerId = state.players[0].id
     try {
       const { error } = await db.rpc('advance_turn_safe', {
@@ -109,17 +124,29 @@ export function useGameActions(p: Params) {
       }
     } finally {
       p.isAdvancingRef.current = false
+      console.log('%c[ADVANCE_END]', 'color:#A78BFA', 'isAdvancingRef → false')
     }
   }
 
   async function handleRoll() {
-    if (!p.isMyTurn || !p.myPlayer || !p.gameState) return
-    if (p.hasRolledRef.current || p.isRollingRef.current) return
+    // ДИАГНОСТИКА: логируем каждое нажатие кнопки
+    console.log('%c[ROLL_CLICK]', 'color:#34D399;font-weight:bold', new Date().toISOString().slice(11,23))
+    rollDebugState('ROLL_DEBUG')
+
+    if (!p.isMyTurn || !p.myPlayer || !p.gameState) {
+      console.warn('[ROLL_BLOCKED] guard: isMyTurn=%s myPlayer=%s gameState=%s', p.isMyTurn, !!p.myPlayer, !!p.gameState)
+      return
+    }
+    if (p.hasRolledRef.current || p.isRollingRef.current) {
+      console.warn('[ROLL_BLOCKED] refs: hasRolledRef=%s isRollingRef=%s', p.hasRolledRef.current, p.isRollingRef.current)
+      return
+    }
     p.isRollingRef.current = true
     p.hasRolledRef.current = true
     if ((p.myPlayer as any).is_eliminated) { p.isRollingRef.current = false; p.hasRolledRef.current = false; advanceTurn(p.gameState); return }
     const doubleDiceRounds = (p.myPlayer as any).double_dice_rounds ?? 0
     if ((p.myPlayer as any).skip_turns > 0) { p.hasRolledRef.current = false; p.isRollingRef.current = false; return }
+    console.log('%c[ROLL_START]', 'color:#34D399;font-weight:bold', 'animation starts')
     p.setRolling(true)
     p.setHasRolled(true)
     const bc = p.bcChannelRef.current
@@ -135,6 +162,7 @@ export function useGameActions(p: Params) {
       if (roll2 !== null) p.setDiceValue2(roll2)
       p.setRolling(false)
       p.isRollingRef.current = false
+      console.log('%c[ROLL_END]', 'color:#34D399', 'roll=%s isRollingRef→false', roll)
       bc?.send({ type: 'broadcast', event: 'rolled', payload: { player_id: p.myPlayerId, roll } })
       const { player: movedPlayer, cell, passed_salary, salary_count } = movePlayer(p.myPlayer, roll, getBoardCellsFn())
       let updatedPlayer = movedPlayer
