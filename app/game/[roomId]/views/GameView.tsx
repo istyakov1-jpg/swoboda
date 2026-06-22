@@ -294,9 +294,7 @@ export default function GameView() {
 
 <div className="px-5 pb-4 pt-2" style={{height:78,flexShrink:0}}>
               {isMyTurn ? (
-                <button onPointerDown={() => {
-                  handleRoll()
-                }}
+                <button onPointerDown={handleRoll}
                   className="flex w-full h-full items-center justify-between rounded-[18px] px-4"
                   style={rollBtnStyle}>
                   <div className="flex flex-1 items-center gap-2">
@@ -336,22 +334,6 @@ export default function GameView() {
               )}
             </div>
             <TabBar tab={tab} setTab={setTab} />
-          </div>
-        )}
-
-        {/* DEBUG OVERLAY — видимый лог прямо на экране, тап чтобы закрыть */}
-          <div
-            onPointerDown={() => setDebugLog([])}
-            style={{
-              position:'absolute', bottom:90, left:8, right:8, zIndex:9999,
-              background:'rgba(0,0,0,0.92)', borderRadius:12, padding:'8px 10px',
-              border:'1px solid rgba(255,255,255,0.2)',
-            }}>
-            <div style={{fontSize:9,color:'#F5B843',fontWeight:'bold',marginBottom:4}}>
-              DEBUG (тап = закрыть) | isMyTurn={String(isMyTurn)} hasR={String(hasRolled)} roll={String(rolling)} adv={String(anyoneRolling)}
-            </div>
-              <div key={i} style={{fontSize:9,color:'#fff',opacity:Math.max(0.3,1-i*0.07),fontFamily:'monospace'}}>{line}</div>
-            ))}
           </div>
         )}
 
