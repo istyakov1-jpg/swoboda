@@ -1,5 +1,6 @@
 'use client'
-import { useState, memo, useMemo, useCallback } from 'react'
+import { useState, memo, useMemo, useCallback, useEffect } from 'react'
+import { useRenderCount, useStateChangeTracker, markTurnStart, flushReport } from '@/lib/profiling'
 import { useRouter } from 'next/navigation'
 import { repayDebt, freedomProgress, netPassiveIncome, baseExpenses, getCreditLimit, getTotalDebtPayments } from '@/lib/gameEngine'
 import { STOCKS, CRYPTO, SMALL_DEALS, LARGE_DEALS, getRandomDeal, getRandomDeals, getRandomSellOffer, getRandomEvent, getRandomAuctionAsset, getNewPrice, getPriceChangeEmoji, getStockByTicker, getCryptoByTicker } from '@/lib/gameData'
@@ -94,6 +95,21 @@ export default function GameView() {
   const router = useRouter()
   const [showDDS, setShowDDS] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
+
+  // ── PROFILING (временно) ─────────────────────────────────
+  useRenderCount('GameView', {
+    gameState: gameState?.players?.[0]?.id + '/' + gameState?.round,
+    tab, rolling, timeLeft, showTurnCard, anyoneRolling,
+    diceValue, notification: notification?.msg, cashNotif: cashNotif?.label,
+    isMyTurn, hasRolled, winner: !!winner,
+  })
+  useStateChangeTracker('GameView-state', {
+    tab, rolling, timeLeft, showTurnCard, anyoneRolling, diceValue,
+    isMyTurn, hasRolled, currentPlayer: currentPlayer?.id,
+  })
+  // Метка начала хода при смене текущего игрока
+  useEffect(() => { markTurnStart() }, [currentPlayer?.id])
+  // ── END PROFILING ────────────────────────────────────────
 
   // Мемоизированные derived values — не пересчитываются при несвязанных ре-рендерах
   const sortedPlayers = useMemo(

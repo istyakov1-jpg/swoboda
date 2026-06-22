@@ -1,5 +1,6 @@
 'use client'
 import { memo } from 'react'
+import { useRenderCount } from '@/lib/profiling'
 import { useGameContext } from '../GameContext'
 import { getCreditLimit, getTotalDebtPayments, takeCredit } from '@/lib/gameEngine'
 import { supabase } from '@/lib/supabase'
@@ -12,6 +13,7 @@ const EmergencyModal = memo(function EmergencyModal() {
     roomId, showEmergency, myPlayer, gameState, myPlayerId,
     setShowEmergency, advanceTurn, showNotif, showCashNotif, latestStateRef,
   } = useGameContext()
+  useRenderCount('EmergencyModal', { showEmergency, cash: myPlayer?.cash })
 
   if (!showEmergency || !myPlayer || !gameState) return null
 

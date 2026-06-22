@@ -14,6 +14,7 @@ import { useGameRoom } from './hooks/useGameRoom'
 import { useBotRunner } from './hooks/useBotRunner'
 import { useGameActions } from './hooks/useGameActions'
 import { useGameEffects } from './hooks/useGameEffects'
+import { useRenderCount, useStateChangeTracker } from '@/lib/profiling'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -133,6 +134,21 @@ export default function GamePage() {
   }, [gameState?.players, onlinePlayers, myPlayerId, isHost])
 
   const showDiceRolling = rolling || anyoneRolling || (!isMyTurn && !!currentPlayer?.is_bot)
+
+  // ── PROFILING (временно) ─────────────────────────────────
+  useRenderCount('GamePage', {
+    gameState: gameState?.players?.[0]?.id,
+    roomStatus, rolling, hasRolled, timeLeft, anyoneRolling,
+    diceValue, showTurnCard, showBankrupt, showEmergency, winner: !!winner,
+    marketData: marketData?.ticker, cashNotif: cashNotif?.label,
+  })
+  useStateChangeTracker('GamePage-state', {
+    roomStatus, rolling, hasRolled, timeLeft, anyoneRolling, diceValue,
+    showTurnCard, showBankrupt, showEmergency, notification: notification?.msg,
+    cashNotif: cashNotif?.label, marketQty, tab, balanceTab, journalFilter,
+    gameStateRound: gameState?.round, currentPlayerId: currentPlayer?.id,
+  })
+  // ── END PROFILING ────────────────────────────────────────
 
   const { wgs, showNotif, showCashNotif, handleRoll, handleBuy, handlePass, handleAuctionBuy, advanceTurn } = useGameActions({
     roomId, myPlayerId, gameState, myPlayer, isMyTurn, hasRolled, currentCell,
