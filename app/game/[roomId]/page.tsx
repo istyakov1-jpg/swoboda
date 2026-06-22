@@ -200,6 +200,8 @@ export default function GamePage() {
   const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
   const roomStatusRef = useRef<string>('lobby') // синхронная копия roomStatus для polling
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pickedHitRef = useRef<any>(null) // синхронная копия pickedHit — React state недоступен внутри setTimeout
+  const broadcastAnimRef = useRef<ReturnType<typeof setInterval> | null>(null) // защита от утечки интервалов broadcast
   const [roomStatus, setRoomStatus] = useState<string>('lobby')
   const [startingGame, setStartingGame] = useState(false)
   const [gameStarting, setGameStarting] = useState(false) // "Запускается..." для не-хоста
@@ -256,12 +258,15 @@ export default function GamePage() {
       .subscribe((status: string) => {
         // Если подписка установлена — перечитываем свежий стейт на случай если пропустили событие
         if (status === 'SUBSCRIBED') {
+          // Re-fetch чтобы не пропустить события до подписки
+          // Но НЕ перезаписываем если игра уже идёт (reconnect во время хода)
           db.from('rooms').select('game_state, status, host_id').eq('id', roomId).single()
             .then(({ data }: {data: any}) => {
               if (data) {
-                setGameState(data.game_state)
-                setRoomStatus(data.status)
+                setRoomStatus(prev => prev === 'playing' ? 'playing' : data.status)
                 if (data.host_id) setIsHost(data.host_id === pid)
+                // Обновляем стейт только если игра ещё не началась (иначе перезаписываем in-progress)
+                if (data.status !== 'playing') setGameState(data.game_state)
               }
             })
         }
@@ -274,10 +279,12 @@ export default function GamePage() {
       .on('broadcast', { event: 'rolling' }, ({ payload }: any) => {
         if (payload?.player_id === pid) return
         setAnyoneRolling(true)
+        // Очищаем предыдущий интервал чтобы не накапливались при быстрых ходах
+        if (broadcastAnimRef.current) clearInterval(broadcastAnimRef.current)
         let count = 0
-        const anim = setInterval(() => {
+        broadcastAnimRef.current = setInterval(() => {
           setDiceValue(Math.floor(Math.random() * 6) + 1)
-          if (++count > 8) clearInterval(anim)
+          if (++count > 8) { clearInterval(broadcastAnimRef.current!); broadcastAnimRef.current = null }
         }, 80)
         if (anyoneRollingTimerRef.current) clearTimeout(anyoneRollingTimerRef.current)
         anyoneRollingTimerRef.current = setTimeout(() => setAnyoneRolling(false), 2000)
@@ -470,7 +477,7 @@ export default function GamePage() {
       } catch (err) {
         console.error('[BOT] ошибка в ходе бота, форсируем advance:', err)
         // Гарантируем что ход перейдёт дальше даже при любой ошибке
-        const gs2 = gameStateRef.current
+        const gs2 = gameStateRef.current ?? gs // gs из внешнего closure как fallback
         if (gs2) await advanceTurn(gs2)
       }
     }, 1500)
@@ -761,7 +768,7 @@ useEffect(() => {
 
   function showNotif(msg: string, color = '#34D399') { setNotification({msg,color}); setTimeout(() => setNotification(null), 2500) }
 
-  // Запись стейта: пробуем атомарный RPC, при ошибке — прямой update
+  // Запись стейта: пробуем атомарный RPC, fallback только если функция не установлена (PGRST202)
   async function wgs(state: any, playerId?: string) {
     const { error } = await db.rpc('write_game_state', {
       p_room_id: roomId,
@@ -769,8 +776,11 @@ useEffect(() => {
       p_new_state: state,
     })
     if (error) {
-      // RPC не установлен — fallback на прямой write
-      await db.from('rooms').update({ game_state: state }).eq('id', roomId)
+      if (error.code === 'PGRST202' || error.message?.includes('Could not find')) {
+        // RPC не установлен — fallback на прямой write
+        await db.from('rooms').update({ game_state: state }).eq('id', roomId)
+      }
+      // Остальные ошибки (например, RPC отклонил т.к. не наш ход) — молча игнорируем
     }
   }
 
@@ -787,7 +797,7 @@ useEffect(() => {
     if (hasRolledRef.current || isRollingRef.current) return // уже бросили в этом ходу
     isRollingRef.current = true
     hasRolledRef.current = true
-    if ((myPlayer as any).is_eliminated) { advanceTurn(gameState); return }
+    if ((myPlayer as any).is_eliminated) { isRollingRef.current = false; hasRolledRef.current = false; advanceTurn(gameState); return }
     // Двойной кубик (благотворительность)
     const doubleDiceRounds = (myPlayer as any).double_dice_rounds ?? 0
 
@@ -847,7 +857,9 @@ useEffect(() => {
       setAuctionSubmitted(false)
       setMyBid('')
       if (cell.type === 'hit') {
-        setPickedHit(getRandomHit())
+        const freshHit = getRandomHit()
+        pickedHitRef.current = freshHit // ref доступен синхронно внутри setTimeout ниже
+        setPickedHit(freshHit)
       } else if (cell.type === 'event') {
         // 35% шанс получить предложение о продаже (если есть подходящие активы)
         const sellableAssets = updatedPlayer.assets.filter((a:any) => a.type === 'real_estate' || a.type === 'business')
@@ -912,14 +924,15 @@ useEffect(() => {
       const prefs = notifPrefsRef.current
 
       // Удар отключён → списать деньги автоматически + верхний баннер
-      if (cell.type === 'hit' && !prefs.hit && pickedHit) {
-        const amount = Math.round(pickedHit.amount * diffConfig.hit_multiplier)
+      const currentHit = pickedHitRef.current // используем ref, не state (state ещё не обновился)
+      if (cell.type === 'hit' && !prefs.hit && currentHit) {
+        const amount = Math.round(currentHit.amount * diffConfig.hit_multiplier)
         const updatedAfterHit = { ...updatedPlayer, cash: updatedPlayer.cash - amount }
         const hitPlayers = gameState.players.map((p: Player) => p.id === myPlayerId ? updatedAfterHit : p)
-        const hitEv = { id: crypto.randomUUID(), round: gameState.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} — ${pickedHit.desc}: −₽${amount.toLocaleString()}`, amount, created_at: new Date().toISOString() }
+        const hitEv = { id: crypto.randomUUID(), round: gameState.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'hit', description: `${myPlayer.name} — ${currentHit.desc}: −₽${amount.toLocaleString()}`, amount, created_at: new Date().toISOString() }
         const autoState = { ...newState, players: hitPlayers, events: [hitEv, ...(newState.events||[])].slice(0,50) }
         latestStateRef.current = autoState
-        showCashNotif(pickedHit.desc, amount, false)
+        showCashNotif(currentHit.desc, amount, false)
         snd.hit()
         await wgs(autoState)
         setTimeout(() => advanceTurn(autoState), 800)
@@ -1053,7 +1066,7 @@ useEffect(() => {
     advanceTurn(baseState)
   }
 
-  async function handleAuctionBuy(bidAmount: number) {
+  async function handleAuctionBuy(bidAmount: number, clearOpenAuction = false) {
     if (!myPlayer || !auctionAsset || !gameState || !hasRolled) return
     if (myPlayer.cash < bidAmount) { showNotif('Недостаточно наличных', '#F87171'); return }
     const debt = Math.max(0, auctionAsset.price - bidAmount)
@@ -1068,7 +1081,8 @@ useEffect(() => {
     }
     const newPlayers = gameState.players.map((p: Player) => p.id === myPlayerId ? updatedPlayer : p)
     const newEvent = { id: crypto.randomUUID(), round: gameState?.round??1, player_id: myPlayerId, player_name: myPlayer.name, type: 'auction_win', description: `${myPlayer.name} выиграл аукцион: ${auctionAsset.name} за ₽${bidAmount.toLocaleString()}`, created_at: new Date().toISOString() }
-    const newState = { ...gameState, players: newPlayers, events: [newEvent, ...(gameState.events||[])].slice(0,50) }
+    // clearOpenAuction: объединяем в один write чтобы не перезаписать asset стейтом без него
+    const newState = { ...gameState, players: newPlayers, events: [newEvent, ...(gameState.events||[])].slice(0,50), ...(clearOpenAuction ? { open_auction: null } : {}) }
     snd.buy()
     showCashNotif(auctionAsset.name, bidAmount, false)
     setShowTurnCard(false)
@@ -1333,9 +1347,7 @@ useEffect(() => {
                   if (!gameState?.open_auction || !myPlayer) return
                   const offer = gameState.open_auction
                   if (myPlayer.cash < offer.price) { showNotif('Недостаточно наличных', '#F87171'); return }
-                  await handleAuctionBuy(offer.price)
-                  const newState = { ...gameState, open_auction: null }
-                  await wgs(newState)
+                  await handleAuctionBuy(offer.price, true) // передаём флаг что нужно закрыть open_auction
                   setShowOpenAuctionModal(false)
                 }}
                 disabled={myPlayer.cash < (gameState.open_auction.price ?? 0)}
