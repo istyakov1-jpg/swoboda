@@ -1,5 +1,6 @@
 'use client'
-import { useState, memo, useMemo, useCallback } from 'react'
+import { useState, memo, useMemo, useCallback, useEffect } from 'react'
+import { useRenderCount, markTurnStart } from '@/lib/profiling'
 import { useRouter } from 'next/navigation'
 import { repayDebt, freedomProgress, netPassiveIncome, baseExpenses, getCreditLimit, getTotalDebtPayments } from '@/lib/gameEngine'
 import { STOCKS, CRYPTO, SMALL_DEALS, LARGE_DEALS, getRandomDeal, getRandomDeals, getRandomSellOffer, getRandomEvent, getRandomAuctionAsset, getNewPrice, getPriceChangeEmoji, getStockByTicker, getCryptoByTicker } from '@/lib/gameData'
@@ -99,6 +100,13 @@ export default function GameView() {
   const router = useRouter()
   const [showDDS, setShowDDS] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
+
+  // PROFILING
+  useRenderCount('GameView', { gameState: currentPlayer?.id, tab, isMyTurn, hasRolled, showTurnCard, winner: !!winner })
+  // TimerContext и DiceContext — отдельно чтобы видеть сколько раз они ре-рендерят своих потребителей:
+  useRenderCount('GameView-timer[timeLeft]', { timeLeft })
+  useRenderCount('GameView-dice[diceValue]', { diceValue, rolling, anyoneRolling })
+
   // Мемоизированные derived values — не пересчитываются при несвязанных ре-рендерах
   const sortedPlayers = useMemo(
     () => [...(gameState?.players ?? [])].sort((a: Player, b: Player) => freedomProgress(b) - freedomProgress(a)),

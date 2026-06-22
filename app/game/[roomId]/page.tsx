@@ -16,6 +16,7 @@ import { useGameRoom } from './hooks/useGameRoom'
 import { useBotRunner } from './hooks/useBotRunner'
 import { useGameActions } from './hooks/useGameActions'
 import { useGameEffects } from './hooks/useGameEffects'
+import { useRenderCount, markTurnStart } from '@/lib/profiling'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -136,6 +137,9 @@ export default function GamePage() {
 
   const showDiceRolling = rolling || anyoneRolling || (!isMyTurn && !!currentPlayer?.is_bot)
 
+  // PROFILING
+  useRenderCount('GamePage', { gameState: currentPlayer?.id, hasRolled, showTurnCard, showBankrupt, showEmergency, winner: !!winner, cashNotif: cashNotif?.label, notification: notification?.msg, marketData: marketData?.ticker })
+  useEffect(() => { markTurnStart() }, [currentPlayer?.id])
 
   const { wgs, showNotif, showCashNotif, handleRoll, handleBuy, handlePass, handleAuctionBuy, advanceTurn } = useGameActions({
     roomId, myPlayerId, gameState, myPlayer, isMyTurn, hasRolled, currentCell,
