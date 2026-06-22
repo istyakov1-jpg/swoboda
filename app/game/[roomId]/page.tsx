@@ -297,6 +297,12 @@ export default function GamePage() {
   const selectedDealNet = selectedDeal ? selectedDeal.passive_income - selectedDealMonthly : 0
   const selectedDealCanAfford = !!(selectedDeal && myPlayer && myPlayer.cash >= selectedDeal.down_payment)
 
+  // useMemo ДО условных return — Rules of Hooks
+  const timerCtxValue = useMemo(() => ({ timeLeft }), [timeLeft])
+  const diceCtxValue = useMemo(() => ({
+    diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling
+  }), [diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling])
+
   // ── Условные return ПОСЛЕ всех хуков ──────────────────────────────────
   if (roomStatus === 'lobby') {
     return (
@@ -319,13 +325,6 @@ export default function GamePage() {
     selectedDealMonthly, selectedDealNet, selectedDealCanAfford,
     gameSettings,
   })
-
-  // timerCtx и diceCtx обновляются часто, но не вызывают ре-рендер
-  // компонентов потребляющих только основной GameContext
-  const timerCtxValue = useMemo(() => ({ timeLeft }), [timeLeft])
-  const diceCtxValue = useMemo(() => ({
-    diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling
-  }), [diceValue, diceValue2, rolling, anyoneRolling, showDiceRolling])
 
   return (
   <GameProvider value={ctxValue}>
