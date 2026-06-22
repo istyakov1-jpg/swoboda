@@ -205,17 +205,23 @@ export function useGameEffects(p: Params) {
     const skipLeft = (p.myPlayer as any).skip_turns ?? 0
     if (skipLeft <= 0) return
     const t = setTimeout(async () => {
-      const remaining = skipLeft - 1
-      const updatedPlayer = { ...p.myPlayer, skip_turns: remaining }
-      const allPlayers = p.gameState.players.map((pl: any) => pl.id === p.myPlayerId ? updatedPlayer : pl)
+      // Читаем свежий стейт — 1500мс могло прийти realtime обновление
+      const gs = p.gameStateRef.current ?? p.gameState
+      const mp = gs.players.find((pl: any) => pl.id === p.myPlayerId)
+      if (!mp || gs.players[0]?.id !== p.myPlayerId) return // ход уже передан
+      const remaining = ((mp as any).skip_turns ?? 1) - 1
+      const updatedPlayer = { ...mp, skip_turns: remaining }
+      const allPlayers = gs.players.map((pl: any) => pl.id === p.myPlayerId ? updatedPlayer : pl)
       const [skipCur, ...skipRest] = allPlayers
-      const ev = { id: crypto.randomUUID(), round: p.gameState.round??1, player_id: p.myPlayerId, player_name: p.myPlayer.name, type: 'hit', description: `${p.myPlayer.name} пропускает ход${remaining > 0 ? ` (осталось: ${remaining})` : ' — возвращается в игру!'}`, created_at: new Date().toISOString() }
-      const newState = { ...p.gameState, players: [...skipRest, skipCur], events: [ev, ...(p.gameState.events||[])].slice(0,50) }
+      const ev = { id: crypto.randomUUID(), round: gs.round??1, player_id: p.myPlayerId, player_name: mp.name, type: 'hit', description: `${mp.name} пропускает ход${remaining > 0 ? ` (осталось: ${remaining})` : ' — возвращается в игру!'}`, created_at: new Date().toISOString() }
+      const newState = { ...gs, players: [...skipRest, skipCur], events: [ev, ...(gs.events||[])].slice(0,50) }
       p.latestStateRef.current = newState
       await p.wgs(newState)
     }, 1500)
     return () => clearTimeout(t)
-  }, [p.isMyTurn, (p.myPlayer as any)?.skip_turns])
+  // gameState?.players?.[0]?.id добавлен чтобы эффект перезапускался при реконнекте
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.isMyTurn, (p.myPlayer as any)?.skip_turns, p.gameState?.players?.[0]?.id])
 
   // Проверка банкротства при каждом ходе
   useEffect(() => {
@@ -252,8 +258,17 @@ export function useGameEffects(p: Params) {
     if (p.showBankrupt || p.showEmergency) return
     if (p.timeLeft <= 0) {
       if (p.isMyTurn && !p.rolling) {
-        if (!p.hasRolled) p.handleRoll()
-        else { p.setShowTurnCard(false); p.advanceTurn(p.gameStateRef.current) }
+        const mySkipTurns = (p.myPlayer as any)?.skip_turns ?? 0
+        if (mySkipTurns > 0) {
+          // skip_turns эффект обрабатывает это автоматически за 1.5 сек
+          // Если мы здесь — значит прошло >60с и эффект не сработал, форсируем
+          p.advanceTurn(p.gameStateRef.current)
+        } else if (!p.hasRolled) {
+          p.handleRoll()
+        } else {
+          p.setShowTurnCard(false)
+          p.advanceTurn(p.gameStateRef.current)
+        }
       } else if (p.isHost && !p.rolling) {
         const gs = p.gameStateRef.current
         if (!gs?.rolling_player_id) { p.advanceTurn(gs) }
