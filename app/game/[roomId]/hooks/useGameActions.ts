@@ -93,7 +93,8 @@ export function useGameActions(p: Params) {
     if (!state?.players?.[0]) return
     if (p.isAdvancingRef.current) return
     p.isAdvancingRef.current = true
-    p.setTimeLeft(TIME_LIMIT)
+    // setTimeLeft убран — таймер сбрасывается только через turn-change effect
+    // когда Supabase realtime подтвердит смену players[0].id
     const expectedPlayerId = state.players[0].id
     try {
       const { error } = await db.rpc('advance_turn_safe', {

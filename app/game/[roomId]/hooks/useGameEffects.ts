@@ -271,7 +271,9 @@ export function useGameEffects(p: Params) {
         }
       } else if (p.isHost && !p.rolling) {
         const gs = p.gameStateRef.current
-        if (!gs?.rolling_player_id) { p.advanceTurn(gs) }
+        // isRollingRef проверяется синхронно — он устанавливается до DB write
+        // это защищает от форс-advance пока игрок в процессе броска
+        if (!gs?.rolling_player_id && !p.isRollingRef.current) { p.advanceTurn(gs) }
       }
       return
     }
