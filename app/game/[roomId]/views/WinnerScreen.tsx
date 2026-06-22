@@ -59,7 +59,7 @@ const WinnerScreen = memo(function WinnerScreen() {
         </div>
       )}
 
-      <button onClick={()=>router.push('/lobby')}
+      <button onClick={()=>{ localStorage.removeItem('svoboda_last_room'); router.push('/lobby') }}
         className="gold-grad w-full rounded-[20px] py-4 text-[16px] font-extrabold text-[#1A1206]"
         style={{boxShadow:'0 16px 36px -12px rgba(245,184,67,.6)'}}>
         Новая игра →

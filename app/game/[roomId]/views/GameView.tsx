@@ -1263,7 +1263,7 @@ export default function GameView() {
           </div>
         ))}
       </div>
-      <button onClick={()=>router.push('/lobby')}
+      <button onClick={()=>{ localStorage.removeItem('svoboda_last_room'); router.push('/lobby') }}
         className="gold-grad w-full rounded-[20px] py-4 text-[16px] font-extrabold text-[#1A1206]"
         style={{boxShadow:'0 16px 36px -12px rgba(245,184,67,.6)'}}>
         Новая игра →
@@ -1387,7 +1387,7 @@ export default function GameView() {
           </button>
           <div style={{height:1,background:'rgba(255,255,255,0.05)'}} />
           <button
-            onClick={() => { window.location.href = '/lobby' }}
+            onClick={() => { localStorage.removeItem('svoboda_last_room'); window.location.href = '/lobby' }}
             className="flex w-full items-center gap-3 px-4 py-3.5 active:bg-white/5">
             <span className="text-[18px]">🚪</span>
             <div className="flex-1 text-left">

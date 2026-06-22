@@ -106,6 +106,7 @@ export default function LobbyPage() {
       }).eq('id', room.id)
 
       localStorage.setItem(`svoboda_player_${room.id}`, playerId)
+      localStorage.setItem('svoboda_last_room', room.id) // для восстановления сессии PWA
       router.push(`/game/${room.id}`) // ожидалка покажется т.к. status='lobby'
     } catch (e: any) {
       setError(e.message)
@@ -133,6 +134,7 @@ export default function LobbyPage() {
 
       await (supabase as any).from('rooms').update({ game_state: { ...state, players: [...state.players, player] } }).eq('id', room.id)
       localStorage.setItem(`svoboda_player_${room.id}`, playerId)
+      localStorage.setItem('svoboda_last_room', room.id)
       router.push(`/game/${room.id}`)
     } catch (e: any) {
       setError(e.message)
