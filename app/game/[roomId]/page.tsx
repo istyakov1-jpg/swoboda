@@ -132,7 +132,7 @@ export default function GamePage() {
 
   const effectiveHost = useMemo(() => {
     const humanIds = (gameState?.players ?? []).filter((p: any) => !p.is_bot).map((p: any) => p.id)
-    const onlineH = humanIds.filter((id: string) => onlinePlayers.has(id) || id === myPlayerId)
+    const onlineH = humanIds.filter((id: string) => onlinePlayers.has(id))
     return isHost || (onlineH.length > 0 && onlineH[0] === myPlayerId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState?.players, onlinePlayers, myPlayerId, isHost])
