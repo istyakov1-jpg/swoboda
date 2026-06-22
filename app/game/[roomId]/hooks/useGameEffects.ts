@@ -176,11 +176,8 @@ export function useGameEffects(p: Params) {
 
   // Сброс таймера и флага при смене хода
   useEffect(() => {
-    console.log('%c[TURN_CHANGED effect]', 'color:#F5B843;font-weight:bold',
-      'new current player:', p.gameState?.players?.[0]?.name,
-      '| hasRolledRef was:', p.hasRolledRef.current,
-      '| isRollingRef was:', p.isRollingRef.current,
-      '| isAdvancingRef was:', p.isAdvancingRef.current)
+    if (typeof window !== 'undefined' && (window as any).__dbg)
+      (window as any).__dbg(`TURN_EFFECT→${p.gameState?.players?.[0]?.name} hasR=${p.hasRolledRef.current} isR=${p.isRollingRef.current} isAdv=${p.isAdvancingRef.current}`)
     p.setTimeLeft(TIME_LIMIT)
     p.setHasRolled(false)
     p.hasRolledRef.current = false

@@ -67,17 +67,13 @@ export function useGameRoom({
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
         (payload: any) => {
-          const prev = payload.old?.game_state
           const next = payload.new.game_state
-          const prevPlayer = prev?.players?.[0]?.id
-          const nextPlayer = next?.players?.[0]?.id
-          console.log('%c[REALTIME_UPDATE]', 'color:#60A5FA', new Date().toISOString().slice(11,23), {
-            rolling_player_id: next?.rolling_player_id?.slice(0,8) ?? null,
-            currentPlayer: nextPlayer?.slice(0,8),
-          })
-          if (prevPlayer && nextPlayer && prevPlayer !== nextPlayer) {
-            console.log('%c[TURN_CHANGED]', 'color:#F5B843;font-weight:bold',
-              prev?.players?.[0]?.name, '→', next?.players?.[0]?.name)
+          if (typeof window !== 'undefined' && (window as any).__dbg) {
+            const prev = payload.old?.game_state
+            const prevP = prev?.players?.[0]?.name
+            const nextP = next?.players?.[0]?.name
+            if (prevP !== nextP) (window as any).__dbg(`RT TURN ${prevP}→${nextP}`)
+            else (window as any).__dbg(`RT upd rp=${next?.rolling_player_id?.slice(0,8)??'null'}`)
           }
           setGameState(payload.new.game_state)
           setRoomStatus(payload.new.status)

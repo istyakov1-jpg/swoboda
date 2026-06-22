@@ -99,6 +99,14 @@ export default function GameView() {
   const router = useRouter()
   const [showDDS, setShowDDS] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [debugLog, setDebugLog] = useState<string[]>([])
+
+  function dbg(msg: string) {
+    const t = new Date().toISOString().slice(14, 23)
+    setDebugLog(prev => [`${t} ${msg}`, ...prev].slice(0, 12))
+  }
+  // Делаем dbg доступной для useGameActions через window
+  if (typeof window !== 'undefined') (window as any).__dbg = dbg
 
   // Мемоизированные derived values — не пересчитываются при несвязанных ре-рендерах
   const sortedPlayers = useMemo(
@@ -294,12 +302,8 @@ export default function GameView() {
 
 <div className="px-5 pb-4 pt-2" style={{height:78,flexShrink:0}}>
               {isMyTurn ? (
-                <button onPointerDown={(e) => {
-                  console.log('%c[ROLL_CLICK UI]', 'color:#34D399;font-weight:bold', new Date().toISOString().slice(11,23), {
-                    rolling, anyoneRolling, showDiceRolling,
-                    hasRolled, isMyTurn,
-                    timeLeft,
-                  })
+                <button onPointerDown={() => {
+                  dbg(`CLICK t=${timeLeft} roll=${rolling} anyon=${anyoneRolling} hasR=${hasRolled}`)
                   handleRoll()
                 }}
                   className="flex w-full h-full items-center justify-between rounded-[18px] px-4"
@@ -341,6 +345,24 @@ export default function GameView() {
               )}
             </div>
             <TabBar tab={tab} setTab={setTab} />
+          </div>
+        )}
+
+        {/* DEBUG OVERLAY — видимый лог прямо на экране, тап чтобы закрыть */}
+        {debugLog.length > 0 && (
+          <div
+            onPointerDown={() => setDebugLog([])}
+            style={{
+              position:'absolute', bottom:90, left:8, right:8, zIndex:9999,
+              background:'rgba(0,0,0,0.92)', borderRadius:12, padding:'8px 10px',
+              border:'1px solid rgba(255,255,255,0.2)',
+            }}>
+            <div style={{fontSize:9,color:'#F5B843',fontWeight:'bold',marginBottom:4}}>
+              DEBUG (тап = закрыть) | isMyTurn={String(isMyTurn)} hasR={String(hasRolled)} roll={String(rolling)} adv={String(anyoneRolling)}
+            </div>
+            {debugLog.map((line, i) => (
+              <div key={i} style={{fontSize:9,color:'#fff',opacity:Math.max(0.3,1-i*0.07),fontFamily:'monospace'}}>{line}</div>
+            ))}
           </div>
         )}
 
