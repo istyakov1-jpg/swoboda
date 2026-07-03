@@ -62,7 +62,7 @@ function baseParams(overrides: Partial<any> = {}) {
     notifPrefsRef: { current: {} }, anyoneRollingTimerRef: { current: null },
     latestStateRef: { current: null }, gameStateRef: { current: null },
     hasRolledRef: { current: false }, isRollingRef: { current: false },
-    isAdvancingRef: { current: false }, bankruptProcessedRef: { current: false },
+    isAdvancingRef: { current: false },
     othersQueue: [], showTurnCard: false, marketData: null,
     setMarketQty: vi.fn(), setOthersQueue: vi.fn(), setMarketData: vi.fn(),
     setCurrentCell: vi.fn(), setQueueMode: vi.fn(), setShowTurnCard: vi.fn(),

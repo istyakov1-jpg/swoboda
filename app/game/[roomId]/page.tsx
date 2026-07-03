@@ -98,7 +98,6 @@ export default function GamePage() {
   const isRollingRef = useRef(false) // защита во время 400мс анимации
   const hasRolledRef = useRef(false) // синхронная копия hasRolled — сбрасывается только при смене хода
   const isAdvancingRef = useRef(false) // защита от двойного advanceTurn
-  const bankruptProcessedRef = useRef(false) // флаг чтобы не запускать банкротство дважды
   const roomStatusRef = useRef<string>('lobby') // синхронная копия roomStatus для polling
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pickedHitRef = useRef<any>(null) // синхронная копия pickedHit — React state недоступен внутри setTimeout
@@ -195,7 +194,7 @@ export default function GamePage() {
     roomId, myPlayerId, gameState, myPlayer, isMyTurn, isHost, rolling, hasRolled,
     roomStatus, winner, showBankrupt, showEmergency, timeLeft,
     notifPrefsRef, anyoneRollingTimerRef, latestStateRef, gameStateRef,
-    hasRolledRef, isRollingRef, isAdvancingRef, bankruptProcessedRef,
+    hasRolledRef, isRollingRef, isAdvancingRef,
     othersQueue, showTurnCard, marketData,
     setMarketQty, setOthersQueue, setMarketData, setCurrentCell, setQueueMode,
     setShowTurnCard, setBabyEvent, setAnyoneRolling, setWinner,

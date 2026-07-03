@@ -29,7 +29,6 @@ interface Params {
   hasRolledRef: React.MutableRefObject<boolean>
   isRollingRef: React.MutableRefObject<boolean>
   isAdvancingRef: React.MutableRefObject<boolean>
-  bankruptProcessedRef: React.MutableRefObject<boolean>
   // state from parent
   othersQueue: any[]
   showTurnCard: boolean
@@ -253,8 +252,7 @@ export function useGameEffects(p: Params) {
     }
     if (!p.isMyTurn) return
     const netFlow = (p.myPlayer.profession?.salary ?? 0) + p.myPlayer.passive_income - p.myPlayer.total_expenses
-    if (p.myPlayer.cash < 0 && netFlow < 0 && !p.bankruptProcessedRef.current && !(p.myPlayer as any).is_eliminated) {
-      p.bankruptProcessedRef.current = true
+    if (p.myPlayer.cash < 0 && netFlow < 0 && !(p.myPlayer as any).is_eliminated) {
       const hasAssets = p.myPlayer.assets.length > 0
       const hasCreditLimit = getCreditLimit(p.myPlayer) > 0
       if (hasAssets || hasCreditLimit) {
