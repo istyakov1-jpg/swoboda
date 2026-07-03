@@ -49,7 +49,11 @@ export function useBotRunner({
           const remaining = (botPlayer as any).skip_turns - 1
           gameLog({ roomId, turnId: turnIdRef.current, eventType: 'SKIP_TURN',
             playerId: botPlayer.id, playerName: botPlayer.name,
-            payload: { skip_before: (botPlayer as any).skip_turns, skip_after: remaining, is_bot: true } })
+            payload: {
+              skip_before: (botPlayer as any).skip_turns, skip_after: remaining, is_bot: true,
+              current_player_before: gs.players[0]?.name, current_player_after: gs.players[1]?.name,
+              effectiveHost: effectiveHostRef.current,
+            } })
           const updatedBot = { ...botPlayer, skip_turns: remaining }
           const allPlayers = gs.players.map((p: any) => p.id === botPlayer.id ? updatedBot : p)
           const [skipCur, ...skipRest] = allPlayers
@@ -63,7 +67,11 @@ export function useBotRunner({
         setDiceValue(roll)
         gameLog({ roomId, turnId: turnIdRef.current, eventType: 'BOT_ACTION',
           playerId: botPlayer.id, playerName: botPlayer.name,
-          payload: { roll, position_before: botPlayer.position, cash: botPlayer.cash } })
+          payload: {
+            roll, position_before: botPlayer.position, cash: botPlayer.cash,
+            current_player_before: gs.players[0]?.name, current_player_after: gs.players[1]?.name,
+            effectiveHost: effectiveHostRef.current,
+          } })
         const botDiff = (gs?.settings?.difficulty ?? 'normal') as GameDifficulty
         const botBoard = getBoardCells(botDiff)
         const { player: movedPlayer, cell, passed_salary, salary_count } = movePlayer(botPlayer, roll, botBoard)

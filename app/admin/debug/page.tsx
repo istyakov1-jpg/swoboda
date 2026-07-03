@@ -91,6 +91,52 @@ export default function DebugPage() {
 
   const allTypes = [...new Set(logs.map(l => l.event_type))]
 
+  // ── Автоматический анализ дублей и подозрительных последовательностей ──
+  const analysis = (() => {
+    const advanceEvents = logs.filter(l => l.event_type === 'ADVANCE_TURN')
+    const botEvents = logs.filter(l => l.event_type === 'BOT_ACTION')
+
+    // Дубли ADVANCE_TURN: два события с одним turn_id
+    const advanceByTurn: Record<string, LogEntry[]> = {}
+    advanceEvents.forEach(e => { (advanceByTurn[e.turn_id] ??= []).push(e) })
+    const advanceDupes = Object.entries(advanceByTurn).filter(([, v]) => v.length > 1)
+
+    // Дубли BOT_ACTION: два события с одним turn_id (тот же бот бросил дважды)
+    const botByTurn: Record<string, LogEntry[]> = {}
+    botEvents.forEach(e => { (botByTurn[e.turn_id] ??= []).push(e) })
+    const botDupes = Object.entries(botByTurn).filter(([, v]) => v.length > 1)
+
+    // turn_id обработан двумя разными client_id
+    const turnByClient: Record<string, Set<string>> = {}
+    logs.forEach(e => {
+      const cid = e.payload?.client_id as string | undefined
+      if (!cid) return
+      (turnByClient[e.turn_id] ??= new Set()).add(cid)
+    })
+    const multiClientTurns = Object.entries(turnByClient).filter(([, clients]) => clients.size > 1)
+
+    // players[0] меняется дважды подряд за <500мс (по TURN_START)
+    const turnStarts = [...logs.filter(l => l.event_type === 'TURN_START')]
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    const rapidTurnChanges: { a: LogEntry; b: LogEntry; deltaMs: number }[] = []
+    for (let i = 1; i < turnStarts.length; i++) {
+      const delta = new Date(turnStarts[i].created_at).getTime() - new Date(turnStarts[i-1].created_at).getTime()
+      if (delta < 500 && turnStarts[i].player_id !== turnStarts[i-1].player_id) {
+        rapidTurnChanges.push({ a: turnStarts[i-1], b: turnStarts[i], deltaMs: delta })
+      }
+    }
+
+    // Один игрок получает два хода подряд (TURN_START player_id == предыдущий TURN_START player_id)
+    const doubleTurns: { a: LogEntry; b: LogEntry }[] = []
+    for (let i = 1; i < turnStarts.length; i++) {
+      if (turnStarts[i].player_id === turnStarts[i-1].player_id) {
+        doubleTurns.push({ a: turnStarts[i-1], b: turnStarts[i] })
+      }
+    }
+
+    return { advanceEvents, advanceDupes, botEvents, botDupes, multiClientTurns, rapidTurnChanges, doubleTurns }
+  })()
+
   return (
     <div style={{ fontFamily: 'Manrope, monospace', background: '#07070D', minHeight: '100vh', color: '#F4F5FA', padding: 24 }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -132,6 +178,48 @@ export default function DebugPage() {
         </div>
 
         {loading && <div style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Загрузка...</div>}
+
+        {/* Auto analysis panel */}
+        {logs.length > 0 && (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12,
+            marginBottom: 20, padding: 16, borderRadius: 12,
+            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <StatBox label='ADVANCE_TURN' value={analysis.advanceEvents.length} sub={`дублей: ${analysis.advanceDupes.length}`} bad={analysis.advanceDupes.length > 0} />
+            <StatBox label='BOT_ACTION' value={analysis.botEvents.length} sub={`дублей: ${analysis.botDupes.length}`} bad={analysis.botDupes.length > 0} />
+            <StatBox label='turn_id × 2 клиента' value={analysis.multiClientTurns.length} bad={analysis.multiClientTurns.length > 0} />
+            <StatBox label='players[0] смена <500мс' value={analysis.rapidTurnChanges.length} bad={analysis.rapidTurnChanges.length > 0} />
+            <StatBox label='игрок получил 2 хода подряд' value={analysis.doubleTurns.length} bad={analysis.doubleTurns.length > 0} />
+          </div>
+        )}
+
+        {/* Suspicious sequences detail */}
+        {(analysis.advanceDupes.length > 0 || analysis.botDupes.length > 0 || analysis.multiClientTurns.length > 0 || analysis.doubleTurns.length > 0) && (
+          <div style={{ marginBottom: 20, padding: 16, borderRadius: 12, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#EF4444', marginBottom: 10 }}>⚠️ Подозрительные последовательности</div>
+            {analysis.advanceDupes.map(([turnId, evs]) => (
+              <div key={turnId} style={{ fontSize: 11, fontFamily: 'monospace', marginBottom: 6, color: 'rgba(255,255,255,0.7)' }}>
+                ADVANCE_TURN дубль (turn={turnId.slice(0,8)}): {evs.map(e => `${(e.payload?.client_id as string) ?? '?'}@${e.created_at.slice(11,23)}`).join(' | ')}
+              </div>
+            ))}
+            {analysis.botDupes.map(([turnId, evs]) => (
+              <div key={turnId} style={{ fontSize: 11, fontFamily: 'monospace', marginBottom: 6, color: 'rgba(255,255,255,0.7)' }}>
+                BOT_ACTION дубль (turn={turnId.slice(0,8)}, {evs[0].player_name}): {evs.map(e => `roll=${e.payload?.roll} client=${(e.payload?.client_id as string)}@${e.created_at.slice(11,23)}`).join(' | ')}
+              </div>
+            ))}
+            {analysis.multiClientTurns.map(([turnId, clients]) => (
+              <div key={turnId} style={{ fontSize: 11, fontFamily: 'monospace', marginBottom: 6, color: 'rgba(255,255,255,0.7)' }}>
+                Один turn_id ({turnId.slice(0,8)}) обработан клиентами: {[...clients].join(', ')}
+              </div>
+            ))}
+            {analysis.doubleTurns.map(({ a, b }, i) => (
+              <div key={i} style={{ fontSize: 11, fontFamily: 'monospace', marginBottom: 6, color: 'rgba(255,255,255,0.7)' }}>
+                {a.player_name} получил ход дважды подряд: {a.created_at.slice(11,23)} → {b.created_at.slice(11,23)}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Legend */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -227,6 +315,20 @@ export default function DebugPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function StatBox({ label, value, sub, bad }: { label: string; value: number; sub?: string; bad?: boolean }) {
+  return (
+    <div style={{
+      padding: 12, borderRadius: 10,
+      background: bad ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.03)',
+      border: `1px solid ${bad ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)'}`,
+    }}>
+      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: bad ? '#EF4444' : '#F4F5FA', marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: bad ? '#FCA5A5' : 'rgba(255,255,255,0.3)', marginTop: 2 }}>{sub}</div>}
     </div>
   )
 }

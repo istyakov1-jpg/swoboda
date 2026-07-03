@@ -32,6 +32,14 @@ export interface GameLogParams {
   payload?: Record<string, unknown>
 }
 
+// ВРЕМЕННО: стабильный ID вкладки/клиента — чтобы отличать кто из клиентов пишет событие
+// Живёт только в памяти таба (не localStorage) — каждая вкладка получает новый при загрузке
+let _clientId: string | null = null
+function getClientId(): string {
+  if (!_clientId) _clientId = crypto.randomUUID().slice(0, 8)
+  return _clientId
+}
+
 // Fire-and-forget — не блокирует игру
 export function gameLog(params: GameLogParams): void {
   db.from('game_debug_logs').insert({
@@ -40,7 +48,7 @@ export function gameLog(params: GameLogParams): void {
     event_type:  params.eventType,
     player_id:   params.playerId ?? null,
     player_name: params.playerName ?? null,
-    payload:     params.payload ?? {},
+    payload:     { ...(params.payload ?? {}), client_id: getClientId() },
   }).then(({ error }: { error: any }) => {
     if (error) console.warn('[gameLog] insert failed:', error.message)
   })

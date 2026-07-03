@@ -223,7 +223,11 @@ export function useGameEffects(p: Params) {
       const remaining = ((mp as any).skip_turns ?? 1) - 1
       gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'SKIP_TURN',
         playerId: p.myPlayerId, playerName: mp.name,
-        payload: { skip_before: skipLeft, skip_after: remaining, isAdvancingRef: p.isAdvancingRef.current } })
+        payload: {
+          skip_before: skipLeft, skip_after: remaining, isAdvancingRef: p.isAdvancingRef.current,
+          current_player_before: gs.players[0]?.name, current_player_after: gs.players[1]?.name,
+          isHost: p.isHost, is_bot: false,
+        } })
 
       const updatedPlayer = { ...mp, skip_turns: remaining }
       const allPlayers = gs.players.map((pl: any) => pl.id === p.myPlayerId ? updatedPlayer : pl)

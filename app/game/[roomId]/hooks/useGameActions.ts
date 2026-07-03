@@ -57,6 +57,8 @@ interface Params {
   cashNotifTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
   snd: any
   turnIdRef: React.MutableRefObject<string>
+  isHost?: boolean
+  effectiveHost?: boolean
 }
 
 export function useGameActions(p: Params) {
@@ -97,7 +99,12 @@ export function useGameActions(p: Params) {
     p.isAdvancingRef.current = true
     gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ADVANCE_TURN',
       playerId: state.players[0].id, playerName: state.players[0].name,
-      payload: { from: state.players[0].name, to: state.players[1]?.name, caller: new Error().stack?.split('\n')[2]?.trim()?.slice(0,60) } })
+      payload: {
+        current_player_before: state.players[0]?.name,
+        current_player_after: state.players[1]?.name,
+        isHost: p.isHost, effectiveHost: p.effectiveHost,
+        caller: new Error().stack?.split('\n')[2]?.trim()?.slice(0,60),
+      } })
     const expectedPlayerId = state.players[0].id
     try {
       const { error } = await db.rpc('advance_turn_safe', {
@@ -130,7 +137,7 @@ export function useGameActions(p: Params) {
     if ((p.myPlayer as any).skip_turns > 0) { p.hasRolledRef.current = false; p.isRollingRef.current = false; return }
     gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ROLL',
       playerId: p.myPlayerId, playerName: p.myPlayer.name,
-      payload: { position: p.myPlayer.position, cash: p.myPlayer.cash } })
+      payload: { position: p.myPlayer.position, cash: p.myPlayer.cash, isHost: p.isHost, effectiveHost: p.effectiveHost } })
     p.setRolling(true)
     p.setHasRolled(true)
     const bc = p.bcChannelRef.current

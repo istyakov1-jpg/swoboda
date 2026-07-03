@@ -167,7 +167,7 @@ export default function GamePage() {
     setSelectedDeal, setDealPool, setShowCredit, setMarketData, setAuctionSubmitted, setMyBid,
     setPickedHit, setPickedEvent, setAuctionAsset, setShowTurnCard, setShowEmergency, setShowBankrupt,
     setSellOffer, setShowAuctionCredit, setCashNotif, setCashColor, setNotification, cashNotifTimerRef, snd,
-    turnIdRef,
+    turnIdRef, isHost, effectiveHost,
   })
 
   useGameRoom({
