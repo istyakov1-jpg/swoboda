@@ -17,6 +17,7 @@ import { useBotRunner } from './hooks/useBotRunner'
 import { useGameActions } from './hooks/useGameActions'
 import { useGameEffects } from './hooks/useGameEffects'
 import { gameLog } from '@/lib/gameLogger'
+import DebugOverlay from './components/DebugOverlay'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -336,6 +337,7 @@ export default function GamePage() {
     return (
       <GameProvider value={buildCtx({ boardCells: [], diffConfig: {}, keyRate: 0 })}>
         <LobbyView />
+        <DebugOverlay />
       </GameProvider>
     )
   }
@@ -361,6 +363,7 @@ export default function GamePage() {
         <GameView />
       </GameDiceProvider>
     </GameTimerProvider>
+    <DebugOverlay />
   </GameProvider>
   )
 }
