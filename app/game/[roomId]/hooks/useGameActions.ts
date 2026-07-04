@@ -5,6 +5,7 @@ import { STOCKS, CRYPTO, SMALL_DEALS, LARGE_DEALS, KEY_RATE_DEFAULT, DIFFICULTY_
 import { sounds, TIME_LIMIT } from '@/lib/gameConstants'
 import type { Player } from '@/types/database'
 import { gameLog } from '@/lib/gameLogger'
+import { logWarning, markIntent, newTraceId } from '@/lib/gameTransitionLogger'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -95,7 +96,12 @@ export function useGameActions(p: Params) {
 
   async function advanceTurn(state: any) {
     if (!state?.players?.[0]) return
-    if (p.isAdvancingRef.current) return
+    if (p.isAdvancingRef.current) {
+      logWarning('DUPLICATE_ADVANCE', {
+        attemptedPlayerId: state.players[0].id, attemptedPlayerName: state.players[0].name,
+      }, { roomId: p.roomId, turnId: p.turnIdRef.current })
+      return
+    }
     p.isAdvancingRef.current = true
     gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ADVANCE_TURN',
       playerId: state.players[0].id, playerName: state.players[0].name,
@@ -135,13 +141,15 @@ export function useGameActions(p: Params) {
     if ((p.myPlayer as any).is_eliminated) { p.isRollingRef.current = false; p.hasRolledRef.current = false; advanceTurn(p.gameState); return }
     const doubleDiceRounds = (p.myPlayer as any).double_dice_rounds ?? 0
     if ((p.myPlayer as any).skip_turns > 0) { p.hasRolledRef.current = false; p.isRollingRef.current = false; return }
+    const rollTraceId = newTraceId()
     gameLog({ roomId: p.roomId, turnId: p.turnIdRef.current, eventType: 'ROLL',
       playerId: p.myPlayerId, playerName: p.myPlayer.name,
-      payload: { position: p.myPlayer.position, cash: p.myPlayer.cash, isHost: p.isHost, effectiveHost: p.effectiveHost } })
+      payload: { position: p.myPlayer.position, cash: p.myPlayer.cash, isHost: p.isHost, effectiveHost: p.effectiveHost, traceId: rollTraceId } })
     p.setRolling(true)
     p.setHasRolled(true)
     const bc = p.bcChannelRef.current
     bc?.send({ type: 'broadcast', event: 'rolling', payload: { player_id: p.myPlayerId } })
+    markIntent('roll', rollTraceId, p.myPlayerId) // снимется в logTransition когда придёт realtime-подтверждение rolling_player_id
     db.from('rooms').update({ game_state: { ...p.gameState, rolling_player_id: p.myPlayerId } }).eq('id', p.roomId)
     p.snd.dice()
     p.setDiceValue2(null)

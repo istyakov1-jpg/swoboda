@@ -71,7 +71,7 @@ describe('logWarning', () => {
 
 describe('Intent tracking — no internal timers', () => {
   it('markIntent stores createdAt, clearIntent removes only matching type', () => {
-    markIntent('roll', 'trace1')
+    markIntent('roll', 'trace1', 'p1')
     const intent = getIntent()
     expect(intent?.type).toBe('roll')
     expect(intent?.traceId).toBe('trace1')
@@ -86,7 +86,7 @@ describe('Intent tracking — no internal timers', () => {
 
   it('does not schedule any timers internally (pure createdAt-based)', () => {
     const spy = vi.spyOn(global, 'setTimeout')
-    markIntent('advance', 'trace2')
+    markIntent('advance', 'trace2', 'p1')
     expect(spy).not.toHaveBeenCalled()
     spy.mockRestore()
   })

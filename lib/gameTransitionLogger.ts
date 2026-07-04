@@ -23,6 +23,10 @@ function computeDelta(before: TransitionSnapshot, after: TransitionSnapshot): Pa
 }
 
 // ── Transition (только из подтверждённого STATE_UPDATE) ────────────────────
+// Здесь же живут все anomaly-проверки, которые можно вычислить чисто из before/after —
+// STALE_ROLLING_PLAYER, RAPID_TURN_CHANGE, MISSING_ROLLING_PLAYER_ID_AFTER_ROLL.
+// DUPLICATE_ADVANCE сюда не входит — это факт вызова функции, а не переход состояния,
+// проверяется в useGameActions.ts прямо у guard'а isAdvancingRef.
 export function logTransition(params: {
   roomId: string
   turnId: string
@@ -33,12 +37,63 @@ export function logTransition(params: {
   after: TransitionSnapshot
 }): Partial<TransitionSnapshot> {
   const delta = computeDelta(params.before, params.after)
+
+  // Если это подтверждение ожидаемого roll — подхватываем traceId из intent для корреляции
+  const pendingRoll = currentIntent?.type === 'roll' ? currentIntent : null
+  const effectiveTraceId = params.traceId
+    ?? (pendingRoll && params.after.rolling_player_id === pendingRoll.playerId ? pendingRoll.traceId : undefined)
+
   pushRingEntry({
-    ts: Date.now(), roomId: params.roomId, turnId: params.turnId, traceId: params.traceId,
+    ts: Date.now(), roomId: params.roomId, turnId: params.turnId, traceId: effectiveTraceId,
     kind: 'transition', action: params.action, source: params.source,
     before: params.before, after: params.after, delta,
   })
   noteTransitionForStuckCheck(params.turnId)
+
+  const ctx = { roomId: params.roomId, turnId: params.turnId, traceId: effectiveTraceId }
+
+  // STALE_ROLLING_PLAYER — кто-то отмечен как "бросает", но ход уже не его
+  if (params.after.rolling_player_id && params.after.rolling_player_id !== params.after.currentTurn) {
+    logWarning('STALE_ROLLING_PLAYER', {
+      rolling_player_id: params.after.rolling_player_id,
+      currentTurn: params.after.currentTurn,
+    }, ctx)
+  }
+
+  // RAPID_TURN_CHANGE — currentTurn реально изменился
+  if (delta.currentTurn !== undefined) {
+    const now = Date.now()
+    if (lastTurnChangeAt !== null) {
+      const deltaMs = now - lastTurnChangeAt
+      const severity = classifyTurnChangeSpeed(deltaMs)
+      if (severity) {
+        logWarning('RAPID_TURN_CHANGE', {
+          deltaMs, from: lastKnownTurn, to: params.after.currentTurn,
+        }, ctx, severity)
+      }
+    }
+    lastTurnChangeAt = now
+    lastKnownTurn = params.after.currentTurn
+  }
+
+  // MISSING_ROLLING_PLAYER_ID_AFTER_ROLL — проверяем незакрытый roll-intent
+  if (pendingRoll) {
+    if (params.after.rolling_player_id === pendingRoll.playerId) {
+      clearIntent('roll') // подтверждено — всё хорошо
+    } else {
+      const elapsed = Date.now() - pendingRoll.createdAt
+      if (elapsed > ROLL_CONFIRM_TIMEOUT_MS) {
+        logWarning('MISSING_ROLLING_PLAYER_ID_AFTER_ROLL', {
+          elapsedMs: elapsed,
+          expectedPlayerId: pendingRoll.playerId,
+          actualRollingPlayerId: params.after.rolling_player_id,
+        }, { roomId: params.roomId, turnId: params.turnId, traceId: pendingRoll.traceId })
+        clearIntent('roll') // не спамим на каждый последующий STATE_UPDATE
+      }
+      // elapsed <= 500мс — рано считать пропажей, ничего не делаем
+    }
+  }
+
   return delta
 }
 
@@ -72,12 +127,15 @@ interface Intent {
   type: IntentType
   createdAt: number
   traceId: string
+  playerId: string
 }
+
+const ROLL_CONFIRM_TIMEOUT_MS = 500
 
 let currentIntent: Intent | null = null
 
-export function markIntent(type: IntentType, traceId: string): void {
-  currentIntent = { type, createdAt: Date.now(), traceId }
+export function markIntent(type: IntentType, traceId: string, playerId: string): void {
+  currentIntent = { type, createdAt: Date.now(), traceId, playerId }
 }
 
 export function clearIntent(type: IntentType): void {
@@ -92,6 +150,10 @@ export function getIntent(): Intent | null {
 export function __resetIntentForTests(): void {
   currentIntent = null
 }
+
+// ── RAPID_TURN_CHANGE: отслеживаем момент последней реальной смены хода ────
+let lastTurnChangeAt: number | null = null
+let lastKnownTurn: string | null = null
 
 // ── TURN_STUCK: один глобальный таймер, не watchdog на каждый ход ──────────
 let lastTransitionAt = Date.now()
@@ -131,6 +193,8 @@ export function __resetStuckWatcherForTests(): void {
   lastTransitionAt = Date.now()
   lastTurnId = null
   stuckWarned = false
+  lastTurnChangeAt = null
+  lastKnownTurn = null
 }
 
 // ── RAPID_TURN_CHANGE — вспомогательная функция для оценки порога ──────────

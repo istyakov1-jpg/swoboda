@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { logTransition, type TransitionSnapshot } from '@/lib/gameTransitionLogger'
+import { logTransition, startStuckWatcher, type TransitionSnapshot } from '@/lib/gameTransitionLogger'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -54,6 +54,9 @@ export function useGameRoom({
   turnIdRef,
 }: UseGameRoomParams) {
   const router = useRouter()
+
+  // Diagnostic-only: один глобальный watchdog на TURN_STUCK, стартует один раз (идемпотентно)
+  startStuckWatcher(() => (roomId && turnIdRef.current ? { roomId, turnId: turnIdRef.current } : null))
 
   useEffect(() => {
     const pid = localStorage.getItem(`svoboda_player_${roomId}`)
