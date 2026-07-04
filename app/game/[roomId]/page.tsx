@@ -95,6 +95,7 @@ export default function GamePage() {
   const bcChannelRef = useRef<any>(null)
   const latestStateRef = useRef<any>(null) // последний сохранённый стейт после броска
   const gameStateRef = useRef<any>(null) // всегда актуальный gameState без добавления в deps
+  const timeLeftRef = useRef(60) // синхронное зеркало timeLeft — для diagnostic transition snapshot без stale closure
   const isRollingRef = useRef(false) // защита во время 400мс анимации
   const hasRolledRef = useRef(false) // синхронная копия hasRolled — сбрасывается только при смене хода
   const isAdvancingRef = useRef(false) // защита от двойного advanceTurn
@@ -173,11 +174,13 @@ export default function GamePage() {
     roomId, setMyPlayerId, setShowIntro, setGameState, setRoomStatus, setRoomCode, setIsHost,
     setDiceValue, setAnyoneRolling, setGameStarting,
     anyoneRollingTimerRef, broadcastAnimRef, bcChannelRef, channelRef, pollIntervalRef, roomStatusRef,
+    gameStateRef, hasRolledRef, timeLeftRef, turnIdRef,
   })
 
   // Синхронизируем refs
   useEffect(() => { roomStatusRef.current = roomStatus }, [roomStatus])
   gameStateRef.current = gameState // обновляется при каждом рендере, без useEffect
+  timeLeftRef.current = timeLeft // то же самое для timeLeft — нужно diagnostic-логгеру
   // ref чтобы бот-эффект всегда видел актуальное значение без добавления в deps
   const effectiveHostRef = useRef(false)
   effectiveHostRef.current = effectiveHost

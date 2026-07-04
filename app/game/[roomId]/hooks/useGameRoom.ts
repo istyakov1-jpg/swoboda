@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { logTransition, type TransitionSnapshot } from '@/lib/gameTransitionLogger'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
@@ -23,6 +24,11 @@ interface UseGameRoomParams {
   channelRef: React.MutableRefObject<any>
   pollIntervalRef: React.MutableRefObject<ReturnType<typeof setInterval> | null>
   roomStatusRef: React.MutableRefObject<string>
+  // Diagnostic-only, аддитивные параметры — не влияют на игровую логику
+  gameStateRef: React.MutableRefObject<any>
+  hasRolledRef: React.MutableRefObject<boolean>
+  timeLeftRef: React.MutableRefObject<number>
+  turnIdRef: React.MutableRefObject<string>
 }
 
 export function useGameRoom({
@@ -42,6 +48,10 @@ export function useGameRoom({
   channelRef,
   pollIntervalRef,
   roomStatusRef,
+  gameStateRef,
+  hasRolledRef,
+  timeLeftRef,
+  turnIdRef,
 }: UseGameRoomParams) {
   const router = useRouter()
 
@@ -67,6 +77,28 @@ export function useGameRoom({
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
         (payload: any) => {
+          // Diagnostic-only: логируем transition ДО применения нового стейта.
+          // hasRolled/timeLeft — клиент-локальный контекст на момент прихода события
+          // (эти поля не часть game_state и не различаются before/after сами по себе;
+          // они здесь чтобы можно было сопоставить "что клиент думал локально" с тем,
+          // что реально пришло с сервера в этот момент).
+          const before: TransitionSnapshot = {
+            currentTurn: gameStateRef.current?.players?.[0]?.id ?? null,
+            rolling_player_id: gameStateRef.current?.rolling_player_id ?? null,
+            hasRolled: hasRolledRef.current,
+            timeLeft: timeLeftRef.current,
+          }
+          const after: TransitionSnapshot = {
+            currentTurn: payload.new.game_state?.players?.[0]?.id ?? null,
+            rolling_player_id: payload.new.game_state?.rolling_player_id ?? null,
+            hasRolled: hasRolledRef.current,
+            timeLeft: timeLeftRef.current,
+          }
+          logTransition({
+            roomId, turnId: turnIdRef.current, action: 'STATE_UPDATE', source: 'realtime',
+            before, after,
+          })
+
           setGameState(payload.new.game_state)
           setRoomStatus(payload.new.status)
           if (payload.new.host_id) setIsHost(payload.new.host_id === pid)
